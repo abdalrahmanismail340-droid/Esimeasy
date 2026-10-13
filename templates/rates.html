@@ -34,12 +34,15 @@
   <form method="post">
     <label>رصيدك من العملات</label>
     <input type="number" name="balance" value="{{ balance }}" min="0">
-    <label>كود الدولة أو اسمها (مثال: 20 أو Egypt)</label>
-    <input type="text" name="code" placeholder="20" value="{{ result.query if result else '' }}">
+    <label>كود الدولة أو اسمها أو أول الرقم (مثال: 20 أو 201012345678)</label>
+    <input type="text" name="code" placeholder="201012345678" value="{{ result.query if result else '' }}">
     <button type="submit">اعرف السعر</button>
   </form>
   {% if result %}
     <div class="bal">رصيدك: <b>{{ result.balance }}</b> عملة</div>
+    {% if result.detected_from_number %}
+    <div class="bal">📞 كود الدولة المكتشف من الرقم: <b dir="ltr">+{{ result.detected_from_number }}</b></div>
+    {% endif %}
     {% if result.matches %}
       {% for m in result.matches %}
       <div class="card">

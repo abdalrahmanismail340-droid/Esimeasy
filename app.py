@@ -70,21 +70,34 @@ def rates():
     balance = session.get("balance", 10000)
     result = None
     if request.method == "POST":
-        query = request.form.get("code", "").strip().lower().lstrip("+")
+        raw = request.form.get("code", "").strip()
+        query = raw.lower().lstrip("+").replace(" ", "").replace("-", "")
         try:
             balance = int(request.form.get("balance", balance))
         except (ValueError, TypeError):
             pass
         session["balance"] = balance
         matches = []
+        detected_from_number = None
         for code, entries in RATES.items():
             for name, rate in entries:
                 if query and (query == code or query in name.lower()):
                     minutes = round(balance / rate, 1) if rate else 0
                     matches.append({"code": code, "name": name, "rate": rate,
                                     "minutes": minutes})
-        result = {"query": request.form.get("code", "").strip(),
-                  "balance": balance, "matches": matches}
+        # Phone-number prefix detection: longest dial code matching the start
+        if not matches and query.isdigit():
+            for length in range(min(len(query), 6), 0, -1):
+                prefix = query[:length]
+                if prefix in RATES:
+                    detected_from_number = prefix
+                    for name, rate in RATES[prefix]:
+                        minutes = round(balance / rate, 1) if rate else 0
+                        matches.append({"code": prefix, "name": name,
+                                        "rate": rate, "minutes": minutes})
+                    break
+        result = {"query": raw, "balance": balance, "matches": matches,
+                  "detected_from_number": detected_from_number}
     return render_template("rates.html", result=result, balance=balance)
 
 
