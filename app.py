@@ -1,10 +1,18 @@
 import os
+from datetime import timedelta
 from flask import Flask, redirect, url_for, session, render_template, request
 from authlib.integrations.flask_client import OAuth
+from werkzeug.middleware.proxy_fix import ProxyFix
 from rates import RATES
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
+# Keep the login alive for 30 days instead of forgetting it when the browser closes
+app.permanent_session_lifetime = timedelta(days=30)
+# Railway terminates TLS at its edge proxy and forwards plain HTTP;
+# without this, url_for(_external=True) builds an http:// callback URL
+# and Google rejects the login with redirect_uri_mismatch.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 oauth = OAuth(app)
 google = oauth.register(
@@ -35,6 +43,7 @@ def callback():
     token = google.authorize_access_token()
     userinfo = token.get("userinfo")
     if userinfo:
+        session.permanent = True
         session["user"] = {
             "name": userinfo.get("name"),
             "email": userinfo.get("email"),
