@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>أسعار المكالمات</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Tahoma, sans-serif; background: linear-gradient(135deg, #1a1a2e, #16213e); min-height: 100vh; color: #fff; padding: 24px 16px; }
+  .wrap { max-width: 520px; margin: 0 auto; }
+  a.back { color: #aaa; text-decoration: none; font-size: 14px; }
+  h1 { font-size: 22px; margin: 12px 0 20px; text-align: center; }
+  form { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 16px; padding: 24px; margin-bottom: 20px; }
+  label { display: block; font-size: 13px; color: #aaa; margin-bottom: 6px; }
+  input { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.3); color: #fff; font-size: 16px; margin-bottom: 14px; direction: ltr; text-align: center; }
+  button { width: 100%; padding: 13px; border: none; border-radius: 10px; background: #4285F4; color: #fff; font-size: 16px; font-weight: 600; cursor: pointer; }
+  button:hover { background: #3367d6; }
+  .card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 18px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+  .card .name { font-weight: 600; font-size: 16px; }
+  .card .code { color: #aaa; font-size: 13px; direction: ltr; }
+  .card .rate { text-align: left; }
+  .card .rate b { color: #ffb74d; font-size: 20px; }
+  .card .rate span { display: block; color: #aaa; font-size: 12px; }
+  .card .mins { color: #81c784; font-size: 13px; margin-top: 4px; display: block; }
+  .empty { text-align: center; color: #aaa; padding: 30px; }
+  .bal { text-align: center; color: #aaa; font-size: 13px; margin-bottom: 16px; }
+  .bal b { color: #81c784; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="/">← رجوع</a>
+  <h1>💰 أسعار المكالمات</h1>
+  <form method="post">
+    <label>رصيدك من العملات</label>
+    <input type="number" name="balance" value="{{ balance }}" min="0">
+    <label>كود الدولة أو اسمها (مثال: 20 أو Egypt)</label>
+    <input type="text" name="code" placeholder="20" value="{{ result.query if result else '' }}">
+    <button type="submit">اعرف السعر</button>
+  </form>
+  {% if result %}
+    <div class="bal">رصيدك: <b>{{ result.balance }}</b> عملة</div>
+    {% if result.matches %}
+      {% for m in result.matches %}
+      <div class="card">
+        <div>
+          <div class="name">{{ m.name }}</div>
+          <div class="code">+{{ m.code }}</div>
+        </div>
+        <div class="rate">
+          <b>{{ m.rate }}</b><span>عملة / دقيقة</span>
+          <span class="mins">≈ {{ m.minutes }} دقيقة برصيدك</span>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty">مفيش نتايج لـ "{{ result.query }}" — جرب كود تاني</div>
+    {% endif %}
+  {% endif %}
+</div>
+</body>
+</html>

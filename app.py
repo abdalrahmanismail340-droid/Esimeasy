@@ -1,6 +1,7 @@
 import os
-from flask import Flask, redirect, url_for, session, render_template
+from flask import Flask, redirect, url_for, session, render_template, request
 from authlib.integrations.flask_client import OAuth
+from rates import RATES
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
@@ -51,6 +52,31 @@ def logout():
 @app.route("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.route("/rates", methods=["GET", "POST"])
+def rates():
+    if "user" not in session:
+        return redirect(url_for("index"))
+    balance = session.get("balance", 10000)
+    result = None
+    if request.method == "POST":
+        query = request.form.get("code", "").strip().lower().lstrip("+")
+        try:
+            balance = int(request.form.get("balance", balance))
+        except (ValueError, TypeError):
+            pass
+        session["balance"] = balance
+        matches = []
+        for code, entries in RATES.items():
+            for name, rate in entries:
+                if query and (query == code or query in name.lower()):
+                    minutes = round(balance / rate, 1) if rate else 0
+                    matches.append({"code": code, "name": name, "rate": rate,
+                                    "minutes": minutes})
+        result = {"query": request.form.get("code", "").strip(),
+                  "balance": balance, "matches": matches}
+    return render_template("rates.html", result=result, balance=balance)
 
 
 if __name__ == "__main__":
