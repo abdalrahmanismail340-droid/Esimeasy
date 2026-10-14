@@ -148,7 +148,7 @@ let ws = null, pc = null, callInfo = null;
 let cseq = 1, callId = '', fromTag = '', toTag = '';
 let registered = false, inviteSent = false;
 let timerInt = null, callStart = 0;
-let pendingSdp = null, proxyFailed = false;
+let pendingSdp = null, proxyFailed = false, uiEnded = false;
 
 const PROXY_ERRORS = {
   'no-login-session': 'الجلسة انتهت — اعمل خروج ودخول تاني',
@@ -349,7 +349,7 @@ function endCallUI(msg) {
   hangBtn.style.display = 'none';
   if (pc) { pc.close(); pc = null; }
   if (ws && ws.readyState === 1) { try { ws.close(); } catch(e){} }
-  ws = null; registered = false; inviteSent = false; pendingSdp = null; toTag = ''; proxyFailed = false;
+  ws = null; registered = false; inviteSent = false; pendingSdp = null; toTag = ''; uiEnded = true;
 }
 
 callBtn.onclick = async () => {
@@ -382,9 +382,16 @@ callBtn.onclick = async () => {
     // been observed to kill the handshake through the hosting edge (1006).
     // The proxy->eSIMEasy leg still negotiates 'sip' on its own socket.
     ws = new WebSocket(wsUrl);
+    uiEnded = false; proxyFailed = false;
     ws.onopen = () => sendRegister(null);
     ws.onmessage = e => {
-      // Proxy diagnostics arrive as plain "ERROR:<reason>" text frames.
+      // Step-by-step proxy diagnostics: display but do NOT abort the call,
+      // so the markers keep flowing until the real failing leg is found.
+      if (typeof e.data === 'string' && e.data.startsWith('ERROR:diag:')) {
+        setStatus('🔍 ' + e.data.slice(11));
+        return;
+      }
+      // Real proxy errors are fatal.
       if (typeof e.data === 'string' && e.data.startsWith('ERROR:')) {
         proxyFailed = true;
         endCallUI('⚠️ ' + proxyErrorText(e.data.slice(6)));
@@ -393,7 +400,7 @@ callBtn.onclick = async () => {
       onSipMessage(e.data);
     };
     ws.onerror = () => setStatus('خطأ في الاتصال بالسيرفر');
-    ws.onclose = e => { if (!proxyFailed && !registered && !inviteSent) setStatus('انقطع الاتصال (code ' + e.code + ')'); };
+    ws.onclose = e => { if (!uiEnded && !proxyFailed && !registered && !inviteSent) setStatus('انقطع الاتصال (code ' + e.code + ')'); };
     hangBtn.style.display = '';
     hangBtn.onclick = () => { sendBye(); endCallUI('أنهيت المكالمة'); };
   } catch (e) {
