@@ -6,22 +6,25 @@
 <title>الدايلر — مكالمة حقيقية</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', Tahoma, sans-serif; background: linear-gradient(135deg, #1a1a2e, #16213e); min-height: 100vh; display: flex; align-items: center; justify-content: center; color: #fff; padding: 12px 0; }
-  .card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 20px; padding: 28px 24px; text-align: center; max-width: 420px; width: 92%; }
+  body { font-family: 'Segoe UI', Tahoma, sans-serif; background: linear-gradient(135deg, #1a1a2e, #16213e); min-height: 100vh; display: flex; align-items: center; justify-content: center; color: #fff; padding: 16px 0; }
+  .card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 20px; padding: 24px 20px; text-align: center; max-width: 440px; width: 95%; }
   h1 { font-size: 20px; margin-bottom: 6px; }
-  .balance { color: #81c784; font-size: 14px; margin-bottom: 16px; }
-  .display { background: rgba(0,0,0,0.35); border-radius: 12px; padding: 14px; font-size: 26px; letter-spacing: 2px; min-height: 62px; margin-bottom: 8px; direction: ltr; overflow-x: auto; white-space: nowrap; }
+  .balance { color: #81c784; font-size: 14px; margin-bottom: 14px; }
+  .display { background: rgba(0,0,0,0.35); border-radius: 12px; padding: 14px; font-size: 26px; letter-spacing: 2px; min-height: 60px; margin-bottom: 8px; direction: ltr; overflow-x: auto; white-space: nowrap; }
   .country { font-size: 14px; color: #4fc3f7; margin-bottom: 12px; min-height: 20px; }
-  .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
-  .pad button { font-size: 22px; padding: 12px 0; border-radius: 50%; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.06); color: #fff; cursor: pointer; aspect-ratio: 1; max-width: 72px; margin: 0 auto; width: 100%; }
+  .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+  .pad button { font-size: 20px; padding: 10px 0; border-radius: 50%; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.06); color: #fff; cursor: pointer; aspect-ratio: 1; max-width: 68px; margin: 0 auto; width: 100%; }
   .pad button:active { background: rgba(255,255,255,0.2); }
-  .pad button small { display: block; font-size: 10px; color: #888; }
+  .pad button small { display: block; font-size: 9px; color: #888; }
   .actions { display: flex; gap: 12px; justify-content: center; margin-bottom: 10px; }
-  .call-btn { width: 68px; height: 68px; border-radius: 50%; border: none; font-size: 28px; cursor: pointer; background: #2e7d32; color: #fff; }
-  .hang-btn { width: 68px; height: 68px; border-radius: 50%; border: none; font-size: 28px; cursor: pointer; background: #c62828; color: #fff; display: none; }
+  .call-btn { width: 64px; height: 64px; border-radius: 50%; border: none; font-size: 26px; cursor: pointer; background: #2e7d32; color: #fff; }
+  .hang-btn { width: 64px; height: 64px; border-radius: 50%; border: none; font-size: 26px; cursor: pointer; background: #c62828; color: #fff; display: none; }
   .status { font-size: 14px; color: #ffd54f; min-height: 22px; margin-bottom: 6px; word-break: break-word; }
   .timer { font-size: 15px; color: #81c784; min-height: 20px; direction: ltr; }
-  .sip-log { background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 8px; margin-top: 10px; font-family: monospace; font-size: 11px; color: #80cbc4; direction: ltr; text-align: left; max-height: 130px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+  .log-container { margin-top: 14px; text-align: left; direction: ltr; }
+  .log-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 12px; color: #aaa; }
+  .log-header button { background: rgba(255,255,255,0.1); border: none; color: #fff; padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 10px; }
+  .sip-log { background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 8px; font-family: monospace; font-size: 11px; color: #80cbc4; height: 110px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
   .back { display: inline-block; margin-top: 12px; color: #888; text-decoration: none; font-size: 13px; }
   input.num { width: 100%; background: transparent; border: none; color: #fff; font-size: 26px; text-align: center; letter-spacing: 2px; outline: none; direction: ltr; }
 </style>
@@ -37,13 +40,16 @@
     <button class="call-btn" id="callBtn" title="اتصال">📞</button>
     <button class="hang-btn" id="hangBtn" title="إنهاء">📵</button>
   </div>
-  <div class="status" id="status"></div>
+  <div class="status" id="status">جاهز للاتصال</div>
   <div class="timer" id="timer"></div>
-  <div class="sip-log" id="sipLog">SIP Log: جاهز...</div>
-  <a class="back" href="/">← رجوع</a>
-  <div style="margin-top:8px;font-size:11px;color:#666;">
-    <a href="#" id="wsTest" style="color:#666;">اختبار الاتصال</a> <span id="wsTestResult"></span>
+  <div class="log-container">
+    <div class="log-header">
+      <span>📋 SIP Activity Log</span>
+      <button onclick="document.getElementById('sipLog').textContent='SIP Log cleared...'">مسح</button>
+    </div>
+    <div class="sip-log" id="sipLog">SIP Log: جاهز...</div>
   </div>
+  <a class="back" href="/">← رجوع</a>
 </div>
 <audio id="remoteAudio" autoplay playsinline></audio>
 
@@ -55,22 +61,6 @@ function logSip(msg) {
   sipLogEl.scrollTop = sipLogEl.scrollHeight;
 }
 
-// ---------- WebSocket self-test ----------
-document.getElementById('wsTest').onclick = async (e) => {
-  e.preventDefault();
-  const out = document.getElementById('wsTestResult');
-  out.textContent = '...';
-  try {
-    const t = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws-echo`);
-    t.onopen = () => t.send('ping');
-    t.onmessage = (ev) => { out.textContent = ev.data === 'echo:ping' ? '✅ شغال' : '❌ ' + ev.data; t.close(); };
-    t.onerror = () => { out.textContent = '❌ خطأ'; };
-    t.onclose = (ev) => { if (out.textContent === '...') out.textContent = '❌ قفل (' + ev.code + ')'; };
-    setTimeout(() => { if (out.textContent === '...') { out.textContent = '❌ مهلة'; try{t.close();}catch(_){}} }, 8000);
-  } catch (err) { out.textContent = '❌ ' + err.message; }
-};
-
-// ---------- keypad ----------
 const pad = document.getElementById('pad');
 const numInput = document.getElementById('numInput');
 const keys = [['1',''],['2','ABC'],['3','DEF'],['4','GHI'],['5','JKL'],['6','MNO'],['7','PQRS'],['8','TUV'],['9','WXYZ'],['*',''],['0','+'],['#','']];
@@ -104,7 +94,6 @@ async function detectCountry() {
   }
 }
 
-// ---------- MD5 ----------
 function md5(str) {
   function rl(n, c) { return (n << c) | (n >>> (32 - c)); }
   function add(x, y) { const l = (x & 0xffff) + (y & 0xffff); return ((x >> 16) + (y >> 16) + (l >> 16) << 16) | (l & 0xffff); }
@@ -146,7 +135,6 @@ function md5(str) {
   return hex(a) + hex(b) + hex(c) + hex(d);
 }
 
-// ---------- SIP + WebRTC dialer ----------
 const statusEl = document.getElementById('status');
 const timerEl = document.getElementById('timer');
 const callBtn = document.getElementById('callBtn');
@@ -204,24 +192,28 @@ function buildAuthHeader(challenge, method, uri) {
 
 function getTargetDialUser() {
   const variants = [
-    callInfo.dialString,
-    '+' + callInfo.dialString,
-    '00' + callInfo.dialString,
+    '+' + callInfo.dialString,                  // نبدأ بالـ + أولاً (زي +201155490236)
+    callInfo.dialString,                        // بدون +
+    '00' + callInfo.dialString,                 // بـ 00
   ];
   return variants[inviteVariant] || callInfo.dialString;
 }
 
-// تنظيف وتصغير الـ SDP عشان سيرفر الـ SIP القديم ميعلقش أو يرفضه
+// تنظيف وتثبيت الكودكس المتوافقة تماماً مع Softbay PBX
 function cleanSdpForSip(sdp) {
   const lines = sdp.split(/\r?\n/);
   const out = [];
+  let skipMedia = false;
   for (const line of lines) {
     if (!line) continue;
-    // استبعاد إضافات المتصفح الطويلة والـ mDNS candidates (.local) اللي بتلخبط السيرفر
     if (line.startsWith('a=extmap:')) continue;
     if (line.startsWith('a=msid-semantic:')) continue;
     if (line.startsWith('a=ssrc-group:')) continue;
     if (line.startsWith('a=candidate:') && line.includes('.local')) continue;
+    // استبعاد مسارات الفيديو نهائياً
+    if (line.startsWith('m=video')) skipMedia = true;
+    if (line.startsWith('m=audio')) skipMedia = false;
+    if (skipMedia) continue;
     out.push(line);
   }
   return out.join('\r\n') + '\r\n';
@@ -283,9 +275,7 @@ function sendRegister(authHeader) {
   const scheme = tls ? 'sips' : 'sip';
   const transport = tls ? 'WSS' : 'WS';
   const uri = `${scheme}:${callInfo.webrtcAddr};transport=${transport}`;
-  const headers = {
-    'to': `<sip:${callInfo.webrtcId}@${callInfo.webrtcAddr}>`
-  };
+  const headers = { 'to': `<sip:${callInfo.webrtcId}@${callInfo.webrtcAddr}>` };
   if (authHeader) headers['Authorization'] = authHeader;
   logSip(`-> REGISTER ${authHeader ? '(Auth)' : ''}`);
   ws.send(sipMsg('REGISTER', uri, headers, null));
@@ -297,11 +287,9 @@ function sendInvite(sdp, authHeader, authHeaderName = 'Authorization') {
   const transport = tls ? 'WSS' : 'WS';
   const dialUser = getTargetDialUser();
   const uri = `${scheme}:${dialUser}@${callInfo.webrtcAddr};transport=${transport}`;
-  const headers = {
-    'to': `<sip:${dialUser}@${callInfo.webrtcAddr}>`
-  };
+  const headers = { 'to': `<sip:${dialUser}@${callInfo.webrtcAddr}>` };
   if (authHeader) headers[authHeaderName] = authHeader;
-  logSip(`-> INVITE ${dialUser} ${authHeader ? '(' + authHeaderName + ')' : ''} [SDP:${sdp.length}B]`);
+  logSip(`-> INVITE ${dialUser}`);
   ws.send(sipMsg('INVITE', uri, headers, sdp));
   inviteSent = true;
 }
@@ -314,13 +302,9 @@ function sendAck(customToHeader, isErrorAck = false) {
   const dialUser = getTargetDialUser();
   const uri = `${scheme}:${dialUser}@${callInfo.webrtcAddr};transport=${transport}`;
   const headers = {};
-  if (customToHeader) {
-    headers['to'] = customToHeader;
-  } else if (toTag) {
-    headers['to'] = `<sip:${dialUser}@${callInfo.webrtcAddr}>;tag=${toTag}`;
-  }
+  if (customToHeader) headers['to'] = customToHeader;
+  else if (toTag) headers['to'] = `<sip:${dialUser}@${callInfo.webrtcAddr}>;tag=${toTag}`;
   logSip(`-> ACK`);
-  // Error ACK (for 401/407) must reuse the exact same Via branch as the INVITE
   ws.send(sipMsg('ACK', uri, headers, null, isErrorAck ? lastInviteBranch : null));
 }
 
@@ -379,7 +363,6 @@ async function onSipMessage(data) {
       setStatus('توثيق الدخول (REGISTER)...');
       sendRegister(auth);
     } else if (pendingSdp) {
-      // في SIP لازم نبعت ACK على الـ 401/407 بتاع الـ INVITE الأول قبل إعادة الإرسال
       sendAck(headers['to'], true);
       setStatus('توثيق المكالمة (INVITE Auth)...');
       sendInvite(pendingSdp, auth, authHeaderName);
@@ -387,18 +370,15 @@ async function onSipMessage(data) {
   } else if (start.startsWith('SIP/2.0 100')) {
     setStatus('جاري فتح الخط (100 Trying)...');
   } else if (start.startsWith('SIP/2.0 180') || start.startsWith('SIP/2.0 183')) {
-    setStatus('بيرن دلوقتي... 📲');
+    setStatus('بيرن... 📲');
     const toH = headers['to'] || '';
     const m = toH.match(/tag=([^\s;,]+)/);
     if (m) toTag = m[1];
     if (body && pc && !pc.remoteDescription) {
-      logSip(`<- Early Media SDP (${body.length}B)`);
       try {
         await pc.setRemoteDescription({ type: 'answer', sdp: body });
         remoteAudio.play().catch(() => {});
-      } catch(e) {
-        logSip(`SDP Err: ${e.message}`);
-      }
+      } catch(e) {}
     }
   } else if (start.startsWith('SIP/2.0 200')) {
     if (cseqH.includes('REGISTER')) {
@@ -414,15 +394,12 @@ async function onSipMessage(data) {
       if (m) toTag = m[1];
       sendAck();
       if (body && pc) {
-        logSip(`<- 200 OK SDP (${body.length}B)`);
         try {
           if (!pc.remoteDescription) {
             await pc.setRemoteDescription({ type: 'answer', sdp: body });
           }
           remoteAudio.play().catch(() => {});
-        } catch(e) {
-          logSip(`SDP200 Err: ${e.message}`);
-        }
+        } catch(e) {}
       }
       if (!timerInt) {
         callStart = Date.now();
@@ -434,7 +411,7 @@ async function onSipMessage(data) {
     } else if (cseqH.includes('BYE')) {
       endCallUI('انتهت المكالمة');
     }
-  } else if (start.startsWith('SIP/2.0 404') && method === 'INVITE' && inviteVariant < 2 && pendingSdp) {
+  } else if ((start.startsWith('SIP/2.0 480') || start.startsWith('SIP/2.0 404')) && method === 'INVITE' && inviteVariant < 2 && pendingSdp) {
     sendAck(headers['to'], true);
     inviteVariant++;
     invCallId = rand(16) + '@esimeasy';
@@ -469,9 +446,7 @@ async function startMedia() {
 
   try {
     setStatus('تجهيز قناة الصوت (WebRTC)...');
-    const iceServers = [
-      { urls: 'stun:stun.l.google.com:19302' }
-    ];
+    const iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
     if (callInfo.stunAddr) {
       const stunClean = callInfo.stunAddr.replace(/^stun:/i, '').trim();
       if (stunClean) iceServers.push({ urls: 'stun:' + stunClean });
@@ -495,9 +470,6 @@ async function startMedia() {
         remoteAudio.play().catch(err => logSip(`Audio play err: ${err.message}`));
       }
     };
-    pc.oniceconnectionstatechange = () => {
-      if (pc) logSip(`ICE State: ${pc.iceConnectionState}`);
-    };
 
     localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
 
@@ -509,10 +481,8 @@ async function startMedia() {
       if (pc.iceGatheringState === 'complete') return res();
       let resolved = false;
       const done = () => { if (!resolved) { resolved = true; res(); } };
-      pc.onicecandidate = e => {
-        if (!e.candidate) done();
-      };
-      setTimeout(done, 2000);
+      pc.onicecandidate = e => { if (!e.candidate) done(); };
+      setTimeout(done, 1500);
     });
 
     if (!pc || !pc.localDescription) return;
@@ -546,7 +516,6 @@ callBtn.onclick = async () => {
   setStatus('تجهيز المكالمة...');
   timerEl.textContent = '';
   sipLogEl.textContent = 'SIP Log: بدء الاتصال...';
-  // فك قفل الصوت في متصفح الموبايل بمجرد ضغط المستخدم على الزرار
   remoteAudio.play().catch(() => {});
   callBtn.style.display = 'none';
   try {
@@ -558,7 +527,7 @@ callBtn.onclick = async () => {
     const info = await r.json();
     if (info.error) { setStatus('خطأ: ' + info.error); callBtn.style.display = ''; return; }
     callInfo = info;
-    logSip(`Setup OK: ${info.webrtcAddr}:${info.webrtcPort} id=${info.webrtcId} dtls=${info.isDtls} turn=${info.isTurn}`);
+    logSip(`Setup OK: ${info.webrtcAddr}:${info.webrtcPort}`);
 
     regCallId = rand(16) + '@esimeasy';
     regFromTag = rand(8);
@@ -576,9 +545,7 @@ callBtn.onclick = async () => {
     ws = new WebSocket(wsUrl);
     uiEnded = false; proxyFailed = false;
 
-    ws.onopen = () => {
-      setStatus('البروكسي جاهز، جاري فتح خط SIP...');
-    };
+    ws.onopen = () => { setStatus('البروكسي جاهز، جاري فتح خط SIP...'); };
 
     ws.onmessage = e => {
       if (typeof e.data === 'string' && e.data.startsWith('ERROR:diag:')) {
