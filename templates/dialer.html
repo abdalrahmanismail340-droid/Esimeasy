@@ -529,7 +529,10 @@ callBtn.onclick = async () => {
     invFromTag = rand(8);
     invCseq = 1;
 
-    const isTlsFlag = (info.isTls === 'Y' || info.isTls === true) ? '1' : '0';
+    const tlsRaw = info.isTls;
+    const tlsStr = String(tlsRaw === true ? 'true' : tlsRaw === false ? 'false' : (tlsRaw ?? '')).toLowerCase();
+    const isTlsFlag = (tlsRaw === true || tlsRaw === 1 || tlsStr === 'y' || tlsStr === 'true' || tlsStr === '1' || tlsStr === 'yes') ? '1' : '0';
+    logSip(`🔍 isTls=${JSON.stringify(tlsRaw)} isDtls=${JSON.stringify(info.isDtls)} -> tls=${isTlsFlag}`);
     callInfo._useWss = isTlsFlag === '1';
 
     const wsUrl = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws-proxy?host=${encodeURIComponent(info.webrtcAddr)}&port=${encodeURIComponent(info.webrtcPort)}&tls=${isTlsFlag}`;

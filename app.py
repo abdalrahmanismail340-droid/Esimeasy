@@ -123,6 +123,7 @@ def ws_proxy(ws):
         backend = None
         used_scheme = "ws"
         errors_log = []
+        wss_errors = []
 
         for scheme in schemes:
             for path in paths:
@@ -142,13 +143,21 @@ def ws_proxy(ws):
                         used_scheme = scheme
                         break
                     except Exception as e:
-                        err_short = str(e).replace("\n", " ")[:45]
+                        err_short = str(e).replace("\n", " ")[:60]
                         errors_log.append(f"{scheme}{path}(sup={int(suppress_orig)}):{err_short}")
+                        if scheme == "wss":
+                            wss_errors.append(f"{path}(sup={int(suppress_orig)}):{err_short}")
                         continue
                 if backend:
                     break
             if backend:
                 break
+            # السيرفر طالب SIPS (isTls=Y): الـ WS العادي هياخد 480 "SIPS Required" مؤكد
+            # فممنوع الـ fallback الصامت لـ ws — لازم نعرف ليه الـ wss فشل
+            if is_tls and scheme == "wss" and not backend:
+                diag("wss-failed:" + " | ".join(wss_errors[:6]))
+                send_error_and_close("backend-tls-failed:" + " | ".join(wss_errors[:3]))
+                return
 
         if not backend:
             send_error_and_close("backend-connect-failed:" + " | ".join(errors_log[:3]))
