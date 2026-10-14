@@ -388,6 +388,12 @@ def api_call_setup():
                 "retCode": data.get("retCode") if isinstance(data, dict) else None,
                 "raw": str(data)[:300]}, 502
 
+    # طباعة الـ response الكامل في لوج السيرفر (Railway logs) — ده بيوريك أي حقل
+    # خفي (زي confirm token، billing id، caller verification flag) ممكن يكون
+    # السيرفر بيستناه ومش موجود في الطلب بتاعنا. شوفه بعد أي محاولة اتصال فاشلة.
+    print(f"[call/req FULL RESPONSE] {data}", flush=True)
+    print(f"[call/req FULL PAYLOAD SENT] {payload}", flush=True)
+
     return {
         "callSequence": data.get("callSequence"),
         "webrtcAddr": data.get("webrtcAddr"),
@@ -404,6 +410,9 @@ def api_call_setup():
         "codecSpec": data.get("codecSpec"),
         "dialString": country_code + dial_number,
         "uniqueId": unique_id,
+        # كل الحقول الراجعة من السيرفر من غير فلترة — عشان نشوف أي حاجة ناقصة
+        # في الريسبونس من غير ما نفتح Railway logs كل مرة.
+        "rawFields": list(data.keys()),
     }
 
 

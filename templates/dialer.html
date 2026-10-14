@@ -44,8 +44,9 @@
   <div class="timer" id="timer"></div>
   <div class="auth-box" id="authBox" style="margin:10px 0; padding:12px; border:1px dashed #ffb74d; border-radius:10px;">
     <div style="font-size:14px; margin-bottom:8px;">📱 توثيق رقم الموبايل <b>إجباري</b> قبل المكالمات (كود واتساب)</div>
+    <div style="font-size:12px; color:#ffb74d; margin-bottom:8px;">⚠️ ده لازم يكون <b>رقمك انت</b> (صاحب الحساب) — مش الرقم اللي هتتصل بيه</div>
     <div id="authStep1">
-      <input class="num" id="authPhone" placeholder="رقم الموبايل (مثال: 01044555099)" inputmode="tel" style="width:100%; margin-bottom:8px;">
+      <input class="num" id="authPhone" placeholder="رقمك انت (مثال: 01044555099)" inputmode="tel" style="width:100%; margin-bottom:8px;">
       <button onclick="requestAuthCode()" style="width:100%;">ابعت كود الواتساب 📩</button>
     </div>
     <div id="authStep2" style="display:none;">
@@ -594,6 +595,7 @@ callBtn.onclick = async () => {
     if (info.error) { setStatus('خطأ: ' + info.error); callBtn.style.display = ''; return; }
     callInfo = info;
     logSip(`Setup OK: ${info.webrtcAddr}:${info.webrtcPort}`);
+    if (info.rawFields) logSip(`call/req raw fields: ${info.rawFields.join(', ')}`);
 
     regCallId = rand(16) + '@esimeasy';
     regFromTag = rand(8);
