@@ -16,6 +16,7 @@ from cryptography.hazmat.primitives import padding
 import requests
 import websocket as ws_client
 from rates import RATES
+from iso3_codes import CALLING_CODE_TO_ISO3
 
 ESIMEASY_LOGIN_URL = "https://esimapi.esimeasy.co.kr:8444/esimeasyasd/v4/user/login"
 ESIMEASY_CALL_REQ_URL = "https://esimapi.esimeasy.co.kr:8444/baycscsd/outbound/dtls/call/req"
@@ -355,7 +356,14 @@ def api_call_setup():
         return {"error": "missing number"}, 400
 
     dial_number = number.lstrip("0")
-    unique_id = uuid.uuid4().hex
+    # التطبيق الأصلي بيبعت كود الدولة بنظام ISO3 (زي "EGY" لمصر، "USA" لأمريكا)
+    # في paramUniqueId/nationalUniqueId — مش UUID عشوائي زي ما كنا باعتين.
+    # الجدول ده مستخرج من tt.smali في الـ APK الرسمي.
+    unique_id = CALLING_CODE_TO_ISO3.get(country_code)
+    if not unique_id:
+        # كود دولة مش موجود في الجدول (نادر) — fallback لمنع كراش، لكن ده
+        # هيفشل زي قبل كده لو السيرفر فعلاً بيتحقق من القيمة دي.
+        unique_id = uuid.uuid4().hex
     device_id = session.get("device_id") or str(uuid.uuid4())
 
     payload = {
@@ -393,6 +401,7 @@ def api_call_setup():
     # السيرفر بيستناه ومش موجود في الطلب بتاعنا. شوفه بعد أي محاولة اتصال فاشلة.
     print(f"[call/req FULL RESPONSE] {data}", flush=True)
     print(f"[call/req FULL PAYLOAD SENT] {payload}", flush=True)
+    print(f"[call/req] country_code={country_code} -> ISO3 uniqueId={unique_id}", flush=True)
 
     return {
         "callSequence": data.get("callSequence"),
@@ -502,6 +511,22 @@ def api_phone_auth_res():
         session["phone_authenticated"] = True
         session.pop("phone_auth_pending", None)
     return {"retCode": data.get("retCode"), "ok": ok, "raw": str(data)[:300]}
+
+
+@app.route("/api/debug/session")
+def api_debug_session():
+    """تشخيص سريع: هل الحساب موثّق فعلاً؟ هل فيه session_id؟ من غير ما تجرب مكالمة."""
+    if "user" not in session:
+        return {"loggedIn": False}
+    esim = session.get("esimeasy") or {}
+    return {
+        "loggedIn": True,
+        "hasSessionId": bool(esim.get("sessionId")),
+        "deviceId": session.get("device_id"),
+        "phoneAuthenticated": bool(session.get("phone_authenticated")),
+        "phoneAuthPending": session.get("phone_auth_pending"),
+        "balance": esim.get("remainCallPoint"),
+    }
 
 
 @app.route("/logout")
