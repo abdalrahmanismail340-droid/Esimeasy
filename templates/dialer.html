@@ -222,6 +222,7 @@ function sipMsg(method, uri, extraHeaders, body, customBranch) {
   const tls = !!callInfo._useWss;
   const transportUpper = tls ? 'WSS' : 'WS';
   const transportLower = tls ? 'wss' : 'ws';
+  const scheme = tls ? 'sips' : 'sip';
 
   const isReg = (method === 'REGISTER');
   const activeCallId = isReg ? regCallId : invCallId;
@@ -240,16 +241,16 @@ function sipMsg(method, uri, extraHeaders, body, customBranch) {
   if (method === 'INVITE') lastInviteBranch = branch;
 
   const defaultTo = isReg
-    ? `"${callInfo.webrtcId}"<sip:${callInfo.webrtcId}@${callInfo.webrtcAddr}>`
-    : `"${getTargetDialUser()}"<sip:${getTargetDialUser()}@${callInfo.webrtcAddr}>`;
+    ? `"${callInfo.webrtcId}"<${scheme}:${callInfo.webrtcId}@${callInfo.webrtcAddr}>`
+    : `"${getTargetDialUser()}"<${scheme}:${getTargetDialUser()}@${callInfo.webrtcAddr}>`;
 
   let msg = `${method} ${uri} SIP/2.0\r\n`;
   msg += `Via: SIP/2.0/${transportUpper} df7jal23ls0d.invalid;branch=${branch};rport\r\n`;
-  msg += `From: "${callInfo.uniqueId}"<sip:${callInfo.webrtcId}@${callInfo.webrtcAddr}>;tag=${activeFromTag}\r\n`;
+  msg += `From: "${callInfo.uniqueId}"<${scheme}:${callInfo.webrtcId}@${callInfo.webrtcAddr}>;tag=${activeFromTag}\r\n`;
   msg += `To: ${extraHeaders.to || defaultTo}\r\n`;
   msg += `Call-ID: ${activeCallId}\r\n`;
   msg += `CSeq: ${seqNum} ${method}\r\n`;
-  msg += `Contact: "${callInfo.webrtcId}"<sip:${callInfo.webrtcId}@df7jal23ls0d.invalid;transport=${transportLower}>\r\n`;
+  msg += `Contact: "${callInfo.webrtcId}"<${scheme}:${callInfo.webrtcId}@df7jal23ls0d.invalid;transport=${transportLower}>\r\n`;
   if (isReg) {
     msg += `Expires: 600\r\n`;
   }
@@ -274,7 +275,7 @@ function sendRegister(authHeader) {
   const scheme = tls ? 'sips' : 'sip';
   const transport = tls ? 'WSS' : 'WS';
   const uri = `${scheme}:${callInfo.webrtcAddr};transport=${transport}`;
-  const headers = { 'to': `"${callInfo.webrtcId}"<sip:${callInfo.webrtcId}@${callInfo.webrtcAddr}>` };
+  const headers = { 'to': `"${callInfo.webrtcId}"<${scheme}:${callInfo.webrtcId}@${callInfo.webrtcAddr}>` };
   if (authHeader) headers['Authorization'] = authHeader;
   logSip(`-> REGISTER ${authHeader ? '(Auth)' : ''}`);
   ws.send(sipMsg('REGISTER', uri, headers, null));
@@ -286,7 +287,7 @@ function sendInvite(sdp, authHeader, authHeaderName = 'Authorization') {
   const transport = tls ? 'WSS' : 'WS';
   const dialUser = getTargetDialUser();
   const uri = `${scheme}:${dialUser}@${callInfo.webrtcAddr};transport=${transport}`;
-  const headers = { 'to': `"${dialUser}"<sip:${dialUser}@${callInfo.webrtcAddr}>` };
+  const headers = { 'to': `"${dialUser}"<${scheme}:${dialUser}@${callInfo.webrtcAddr}>` };
   if (authHeader) headers[authHeaderName] = authHeader;
   logSip(`-> INVITE ${dialUser}`);
   ws.send(sipMsg('INVITE', uri, headers, sdp));
@@ -302,7 +303,7 @@ function sendAck(customToHeader, isErrorAck = false) {
   const uri = `${scheme}:${dialUser}@${callInfo.webrtcAddr};transport=${transport}`;
   const headers = {};
   if (customToHeader) headers['to'] = customToHeader;
-  else if (toTag) headers['to'] = `"${dialUser}"<sip:${dialUser}@${callInfo.webrtcAddr}>;tag=${toTag}`;
+  else if (toTag) headers['to'] = `"${dialUser}"<${scheme}:${dialUser}@${callInfo.webrtcAddr}>;tag=${toTag}`;
   logSip(`-> ACK`);
   ws.send(sipMsg('ACK', uri, headers, null, isErrorAck ? lastInviteBranch : null));
 }
@@ -315,7 +316,7 @@ function sendBye() {
   const dialUser = getTargetDialUser();
   const uri = `${scheme}:${dialUser}@${callInfo.webrtcAddr};transport=${transport}`;
   const headers = {};
-  if (toTag) headers['to'] = `"${dialUser}"<sip:${dialUser}@${callInfo.webrtcAddr}>;tag=${toTag}`;
+  if (toTag) headers['to'] = `"${dialUser}"<${scheme}:${dialUser}@${callInfo.webrtcAddr}>;tag=${toTag}`;
   logSip(`-> BYE`);
   ws.send(sipMsg('BYE', uri, headers, null));
 }
