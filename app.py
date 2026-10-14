@@ -25,6 +25,7 @@ def esim_encrypt_user_id(plain):
     ct = encryptor.update(padded) + encryptor.finalize()
     return base64.b64encode(ct).decode("ascii")
 
+
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
 # Keep the login alive for 30 days instead of forgetting it when the browser closes
@@ -66,66 +67,103 @@ def callback():
     if userinfo:
         session.permanent = True
         google_id = userinfo.get("sub", "")
+        email = userinfo.get("email", "")
         session["user"] = {
             "name": userinfo.get("name"),
-            "email": userinfo.get("email"),
+            "email": email,
             "picture": userinfo.get("picture"),
             "google_id": google_id,
         }
-        # Auto-login to eSIMEasy with the verified Google user ID,
-        # same as the official app does (userId + authenType UAT0002).
-        if google_id:
-            session["esimeasy"] = esimeasy_login(google_id)
+        # Auto-login to eSIMEasy with verified Google user ID + Email fallback
+        if google_id or email:
+            session["esimeasy"] = esimeasy_login(google_id, email)
     return redirect(url_for("index"))
 
 
-def esimeasy_login(google_user_id):
-    """Log into eSIMEasy's backend using the Google user ID.
+def esimeasy_login(google_user_id, email=""):
+    """Log into eSIMEasy's backend using the Google user ID (with Email & format fallbacks).
 
-    Returns dict with sessionId / remainCallPoint on success, else {}.
+    Returns dict with sessionId / remainCallPoint on success, else error dict.
     """
     device_id = session.get("device_id")
     if not device_id:
         device_id = str(uuid.uuid4())
         session["device_id"] = device_id
-    # The app AES-encrypts the Google user ID before sending (ww.u0).
-    enc_id = esim_encrypt_user_id(google_user_id)
-    payload = {
-        "userId": enc_id,
-        "paramUserId": enc_id,
-        "authenType": "UAT0002",
-        "paramAuthenType": "UAT0002",
-        "deviceOs": "AT0001",
-        "deviceId": device_id,
-        "deviceModel": "Web",
-        "deviceOsVersion": "",
-        "deviceOsLanguage": "en",
-        "pushToken": "",
-        "installRootId": "",
-        "isTest": False,
-        "appVersion": "3.0.0",
-        "languageCd": "en",
+
+    headers = {
+        "User-Agent": "okhttp/4.9.3",
+        "Accept": "application/json",
     }
-    try:
-        r = requests.post(ESIMEASY_LOGIN_URL, json=payload, timeout=15)
-        data = r.json()
-    except Exception as e:
-        return {"_error": f"connection: {e}"}
-    if not isinstance(data, dict):
-        return {"_error": "bad response"}
-    if not data.get("sessionId"):
-        return {"_error": f"[b2] retCode={data.get('retCode')}",
-                "_retCode": data.get("retCode"),
-                "_raw": str(data)[:200]}
-    try:
-        balance = float(data.get("remainCallPoint") or 0)
-    except (TypeError, ValueError):
-        balance = 0
+
+    # Try encrypted Google ID first, then encrypted Email, then plain IDs as fallback
+    candidates = []
+    if google_user_id:
+        candidates.append(esim_encrypt_user_id(google_user_id))
+    if email:
+        candidates.append(esim_encrypt_user_id(email))
+        if "@" in email:
+            candidates.append(esim_encrypt_user_id(email.split("@")[0]))
+    if google_user_id:
+        candidates.append(google_user_id)
+    if email:
+        candidates.append(email)
+
+    last_data = {}
+    last_err = None
+
+    for enc_id in candidates:
+        for use_json in (True, False):
+            payload = {
+                "userId": enc_id,
+                "paramUserId": enc_id,
+                "authenType": "UAT0002",
+                "paramAuthenType": "UAT0002",
+                "deviceOs": "AT0001",
+                "deviceId": device_id,
+                "deviceModel": "SM-A366B",
+                "deviceOsVersion": "14",
+                "deviceOsLanguage": "en",
+                "pushToken": "",
+                "installRootId": "",
+                "isTest": False if use_json else "false",
+                "appVersion": "3.0.0",
+                "languageCd": "en",
+            }
+            try:
+                if use_json:
+                    r = requests.post(ESIMEASY_LOGIN_URL, json=payload, headers=headers, timeout=15)
+                else:
+                    r = requests.post(ESIMEASY_LOGIN_URL, data=payload, headers=headers, timeout=15)
+                data = r.json()
+            except Exception as e:
+                last_err = str(e)
+                continue
+
+            if not isinstance(data, dict):
+                continue
+
+            last_data = data
+            if data.get("sessionId"):
+                try:
+                    balance = float(data.get("remainCallPoint") or 0)
+                except (TypeError, ValueError):
+                    balance = 0
+                return {
+                    "sessionId": data.get("sessionId"),
+                    "remainCallPoint": balance,
+                    "memberId": data.get("memberId", ""),
+                    "email": data.get("email", ""),
+                }
+
+    if not last_data and last_err:
+        return {"_error": f"[b3] connection: {last_err}"}
+
+    ret_code = last_data.get("retCode")
+    ret_msg = last_data.get("retMsg") or last_data.get("message") or ""
     return {
-        "sessionId": data.get("sessionId"),
-        "remainCallPoint": balance,
-        "memberId": data.get("memberId", ""),
-        "email": data.get("email", ""),
+        "_error": f"[b3] retCode={ret_code} {ret_msg}".strip(),
+        "_retCode": ret_code,
+        "_raw": str(last_data)[:250],
     }
 
 
