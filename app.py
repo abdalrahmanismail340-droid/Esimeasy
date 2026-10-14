@@ -1,4 +1,8 @@
+from gevent import monkey
+monkey.patch_all()
+
 import os
+import ssl
 import uuid
 import base64
 import threading
@@ -66,19 +70,16 @@ def ws_echo(ws):
 
 @sock.route("/ws-proxy")
 def ws_proxy(ws):
-    """Relay browser wss:// <-> eSIMEasy ws:// (browser blocks plain ws from HTTPS)."""
+    """Relay browser wss:// <-> eSIMEasy ws:// or wss:// with Nginx 400 bypass."""
     stop = threading.Event()
-    DIAG = True  # temporary: step-by-step diagnostics
 
     def diag(msg):
-        if DIAG:
-            try:
-                ws.send("ERROR:diag:" + msg)
-            except Exception:
-                pass
+        try:
+            ws.send("ERROR:diag:" + msg)
+        except Exception:
+            pass
 
     def send_error_and_close(reason):
-        """Tell the browser exactly which leg failed before closing."""
         try:
             ws.send("ERROR:" + reason)
         except Exception:
@@ -89,45 +90,88 @@ def ws_proxy(ws):
             pass
 
     try:
-        diag("start")
         if "user" not in session:
             send_error_and_close("no-login-session")
             return
-        diag("session-ok")
-        target_host = request.args.get("host", "")
-        target_port = request.args.get("port", "")
+
+        target_host = request.args.get("host", "").strip()
+        target_port = request.args.get("port", "").strip()
+        is_tls = request.args.get("tls", "0").lower() in ("1", "true", "y", "yes")
+
         if not target_host or not target_port:
             send_error_and_close("missing-host-port")
             return
-        diag(f"target:{target_host}:{target_port}")
-        target_url = f"ws://{target_host}:{target_port}/ws"
-        try:
-            backend = ws_client.create_connection(
-                target_url, subprotocols=["sip"], timeout=10)
-            backend.settimeout(None)  # blocking recv after connect
-        except Exception as e:
-            send_error_and_close(f"backend-connect-failed:{type(e).__name__}:{str(e)[:80]}")
+
+        # Clean host if it contains protocol or path
+        target_host = (
+            target_host.replace("ws://", "")
+            .replace("wss://", "")
+            .replace("http://", "")
+            .replace("https://", "")
+            .split("/")[0]
+            .split(":")[0]
+        )
+
+        diag(f"connecting:{target_host}:{target_port}")
+
+        schemes = ["wss", "ws"] if is_tls else ["ws", "wss"]
+        paths = ["/ws", "/", "/wss"]
+
+        header_variants = [
+            (True, [f"Host: {target_host}", "User-Agent: okhttp/4.9.3"]),
+            (True, ["User-Agent: okhttp/4.9.3"]),
+            (False, ["User-Agent: okhttp/4.9.3"]),
+        ]
+
+        backend = None
+        used_scheme = "ws"
+        errors_log = []
+
+        for scheme in schemes:
+            for path in paths:
+                for suppress_orig, custom_headers in header_variants:
+                    url = f"{scheme}://{target_host}:{target_port}{path}"
+                    try:
+                        sslopt = {"cert_reqs": ssl.CERT_NONE, "check_hostname": False} if scheme == "wss" else None
+                        backend = ws_client.create_connection(
+                            url,
+                            subprotocols=["sip"],
+                            header=custom_headers,
+                            suppress_origin=suppress_orig,
+                            sslopt=sslopt,
+                            timeout=5,
+                        )
+                        backend.settimeout(None)
+                        used_scheme = scheme
+                        break
+                    except Exception as e:
+                        err_short = str(e).replace("\n", " ")[:45]
+                        errors_log.append(f"{scheme}{path}(sup={int(suppress_orig)}):{err_short}")
+                        continue
+                if backend:
+                    break
+            if backend:
+                break
+
+        if not backend:
+            send_error_and_close("backend-connect-failed:" + " | ".join(errors_log[:3]))
             return
-        diag("backend-ok")
+
+        # Signal browser that backend leg is connected and ready for SIP REGISTER
+        diag(f"backend-ok:{used_scheme}")
+
     except Exception as e:
-        try:
-            ws.send(f"ERROR:proxy-crashed:{type(e).__name__}:{str(e)[:80]}")
-        except Exception:
-            pass
-        try:
-            ws.close()
-        except Exception:
-            pass
+        send_error_and_close(f"proxy-crashed:{type(e).__name__}:{str(e)[:80]}")
         return
 
     def backend_to_browser():
         try:
             while not stop.is_set():
                 try:
-                    msg = backend.recv()  # blocking; raises/None on close
+                    msg = backend.recv()
                 except Exception:
                     break
-                if msg is None:
+                if msg is None or msg == "":
                     break
                 try:
                     ws.send(msg)
@@ -141,7 +185,7 @@ def ws_proxy(ws):
     try:
         while not stop.is_set():
             try:
-                msg = ws.receive()  # blocking; None/raises on close
+                msg = ws.receive()
             except Exception:
                 break
             if msg is None:
