@@ -114,7 +114,7 @@ def esimeasy_login(google_user_id):
     if not isinstance(data, dict):
         return {"_error": "bad response"}
     if not data.get("sessionId"):
-        return {"_error": f"retCode={data.get('retCode')}",
+        return {"_error": f"[b2] retCode={data.get('retCode')}",
                 "_retCode": data.get("retCode"),
                 "_raw": str(data)[:200]}
     try:
