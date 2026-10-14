@@ -145,7 +145,7 @@ let ws = null, pc = null, localStream = null, callInfo = null;
 let regCallId = '', regFromTag = '', regCseq = 1;
 let invCallId = '', invFromTag = '', invCseq = 1, toTag = '';
 let lastInviteSeq = 1, lastInviteBranch = '';
-let registered = false, inviteSent = false, inviteVariant = 0;
+let registered = false, inviteSent = false;
 let timerInt = null, callStart = 0;
 let pendingSdp = null, proxyFailed = false, uiEnded = false;
 
@@ -191,12 +191,9 @@ function buildAuthHeader(challenge, method, uri) {
 }
 
 function getTargetDialUser() {
-  const variants = [
-    '+' + callInfo.dialString,                  // نبدأ بالـ + أولاً (زي +201155490236)
-    callInfo.dialString,                        // بدون +
-    '00' + callInfo.dialString,                 // بـ 00
-  ];
-  return variants[inviteVariant] || callInfo.dialString;
+  // الصيغة الأساسية الصافية بس — الـ backend بيبني dialString بنفس شكل التطبيق
+  // الأصلي (كود الدولة + الرقم من غير صفر محلي)، ودي الصيغة اللي سيرفر eSIMEasy متوقعها
+  return callInfo.dialString;
 }
 
 // تنظيف وتثبيت الكودكس المتوافقة تماماً مع Softbay PBX
@@ -411,13 +408,6 @@ async function onSipMessage(data) {
     } else if (cseqH.includes('BYE')) {
       endCallUI('انتهت المكالمة');
     }
-  } else if ((start.startsWith('SIP/2.0 480') || start.startsWith('SIP/2.0 404')) && method === 'INVITE' && inviteVariant < 2 && pendingSdp) {
-    sendAck(headers['to'], true);
-    inviteVariant++;
-    invCallId = rand(16) + '@esimeasy';
-    invFromTag = rand(8);
-    setStatus(`تجربة صيغة رقم بديلة (${inviteVariant})...`);
-    sendInvite(pendingSdp, null);
   } else if (start.match(/^SIP\/2\.0 [4-6]\d\d/)) {
     if (method === 'INVITE') sendAck(headers['to'], true);
     const code = start.substring(8, 11);
@@ -535,7 +525,6 @@ callBtn.onclick = async () => {
     invCallId = rand(16) + '@esimeasy';
     invFromTag = rand(8);
     invCseq = 1;
-    inviteVariant = 0;
 
     const isTlsFlag = (info.isTls === 'Y' || info.isTls === true) ? '1' : '0';
     callInfo._useWss = isTlsFlag === '1';
