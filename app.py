@@ -20,8 +20,11 @@ from rates import RATES
 ESIMEASY_LOGIN_URL = "https://esimapi.esimeasy.co.kr:8444/esimeasyasd/v4/user/login"
 ESIMEASY_CALL_REQ_URL = "https://esimapi.esimeasy.co.kr:8444/baycscsd/outbound/dtls/call/req"
 # AES key/IV the official app uses to encrypt the userId before login
-# (ww.u0 in the decompiled APK: AES/CBC/PKCS5Padding)
 ESIMEASY_AES_KEY = b"Ykuf2gLd95W?Zfsd"
+
+# Fake token & install root constants to spoof the official Android App fingerprint
+SPOOFED_PUSH_TOKEN = "fcm_token_fake_dummy_string_to_spoof_android_app_123456789"
+SPOOFED_INSTALL_ROOT = "mock_install_root_id_fixed_string"
 
 
 def esim_encrypt_user_id(plain):
@@ -36,11 +39,7 @@ def esim_encrypt_user_id(plain):
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
-# Keep the login alive for 30 days instead of forgetting it when the browser closes
 app.permanent_session_lifetime = timedelta(days=30)
-# Railway terminates TLS at its edge proxy and forwards plain HTTP;
-# without this, url_for(_external=True) builds an http:// callback URL
-# and Google rejects the login with redirect_uri_mismatch.
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 oauth = OAuth(app)
@@ -57,7 +56,6 @@ sock = Sock(app)
 
 @sock.route("/ws-echo")
 def ws_echo(ws):
-    """Simple echo to test if WebSockets work at all on this deploy."""
     try:
         while True:
             msg = ws.receive()
@@ -102,7 +100,6 @@ def ws_proxy(ws):
             send_error_and_close("missing-host-port")
             return
 
-        # Clean host if it contains protocol or path
         target_host = (
             target_host.replace("ws://", "")
             .replace("wss://", "")
@@ -157,7 +154,6 @@ def ws_proxy(ws):
             send_error_and_close("backend-connect-failed:" + " | ".join(errors_log[:3]))
             return
 
-        # Signal browser that backend leg is connected and ready for SIP REGISTER
         diag(f"backend-ok:{used_scheme}")
 
     except Exception as e:
@@ -235,17 +231,12 @@ def callback():
             "picture": userinfo.get("picture"),
             "google_id": google_id,
         }
-        # Auto-login to eSIMEasy with verified Google user ID + Email fallback
         if google_id or email:
             session["esimeasy"] = esimeasy_login(google_id, email)
     return redirect(url_for("index"))
 
 
 def esimeasy_login(google_user_id, email=""):
-    """Log into eSIMEasy's backend using the Google user ID (with Email & format fallbacks).
-
-    Returns dict with sessionId / remainCallPoint on success, else error dict.
-    """
     device_id = session.get("device_id")
     if not device_id:
         device_id = str(uuid.uuid4())
@@ -256,7 +247,6 @@ def esimeasy_login(google_user_id, email=""):
         "Accept": "application/json",
     }
 
-    # Try encrypted Google ID first, then encrypted Email, then plain IDs as fallback
     candidates = []
     if google_user_id:
         candidates.append(esim_encrypt_user_id(google_user_id))
@@ -284,8 +274,8 @@ def esimeasy_login(google_user_id, email=""):
                 "deviceModel": "SM-A366B",
                 "deviceOsVersion": "14",
                 "deviceOsLanguage": "en",
-                "pushToken": "",
-                "installRootId": "",
+                "pushToken": SPOOFED_PUSH_TOKEN,
+                "installRootId": SPOOFED_INSTALL_ROOT,
                 "isTest": False if use_json else "false",
                 "appVersion": "3.0.0",
                 "languageCd": "en",
@@ -341,7 +331,6 @@ def dialer():
 
 @app.route("/api/call/setup", methods=["POST"])
 def api_call_setup():
-    """Call eSIMEasy call/req and return WebRTC/SIP credentials for the browser dialer."""
     if "user" not in session:
         return {"error": "not logged in"}, 401
     esim = session.get("esimeasy") or {}
@@ -353,9 +342,11 @@ def api_call_setup():
     country_code = "".join(c for c in str(body.get("country_code", "")) if c.isdigit())
     if not number:
         return {"error": "missing number"}, 400
-    # dialString = countryNum + number with leading 0 stripped (like the app)
+
     dial_number = number.lstrip("0")
     unique_id = uuid.uuid4().hex
+    device_id = session.get("device_id") or str(uuid.uuid4())
+
     payload = {
         "sessionId": session_id,
         "paramUniqueId": unique_id,
@@ -368,6 +359,12 @@ def api_call_setup():
         "appCd": "ACT0060",
         "appVersion": "3.0.0",
         "languageCd": "en",
+        "deviceOs": "AT0001",
+        "deviceId": device_id,
+        "deviceModel": "SM-A366B",
+        "deviceOsVersion": "14",
+        "pushToken": SPOOFED_PUSH_TOKEN,
+        "installRootId": SPOOFED_INSTALL_ROOT,
     }
     try:
         r = requests.post(ESIMEASY_CALL_REQ_URL, json=payload,
@@ -379,7 +376,7 @@ def api_call_setup():
         return {"error": "call setup rejected",
                 "retCode": data.get("retCode") if isinstance(data, dict) else None,
                 "raw": str(data)[:300]}, 502
-    # Pass through only what the browser dialer needs
+
     return {
         "callSequence": data.get("callSequence"),
         "webrtcAddr": data.get("webrtcAddr"),
@@ -401,7 +398,6 @@ def api_call_setup():
 
 @app.route("/api/prefix/<code>")
 def api_prefix(code):
-    """Return country name + mobile rate for a dial code (used by the dialer)."""
     if "user" not in session:
         return {"error": "not logged in"}, 401
     entries = RATES.get(code)
@@ -429,7 +425,6 @@ def rates():
         return redirect(url_for("index"))
     esim = session.get("esimeasy") or {}
     auto_balance = esim.get("remainCallPoint")
-    # Auto balance from eSIMEasy account when available, else manual (remembered).
     balance = auto_balance if auto_balance else session.get("balance", 10000)
     balance_auto = bool(auto_balance)
     result = None
@@ -452,7 +447,6 @@ def rates():
                     minutes = round(balance / rate, 1) if rate else 0
                     matches.append({"code": code, "name": name, "rate": rate,
                                     "minutes": minutes})
-        # Phone-number prefix detection: longest dial code matching the start
         if not matches and query.isdigit():
             for length in range(min(len(query), 6), 0, -1):
                 prefix = query[:length]
