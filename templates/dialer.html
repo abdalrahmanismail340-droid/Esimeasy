@@ -188,7 +188,7 @@ function sipMsg(method, uri, extraHeaders, body) {
 }
 
 function sendRegister(authHeader) {
-  const tls = callInfo.isTls === 'Y';
+  const tls = !!callInfo._useWss;
   const scheme = tls ? 'sips' : 'sip';
   const transport = tls ? 'WSS' : 'WS';
   const uri = `${scheme}:${callInfo.webrtcAddr};transport=${transport}`;
@@ -198,7 +198,7 @@ function sendRegister(authHeader) {
 }
 
 function sendInvite(sdp, authHeader) {
-  const tls = callInfo.isTls === 'Y';
+  const tls = !!callInfo._useWss;
   const scheme = tls ? 'sips' : 'sip';
   const transport = tls ? 'WSS' : 'WS';
   const uri = `${scheme}:${callInfo.dialString}@${callInfo.webrtcAddr};transport=${transport}`;
@@ -210,7 +210,7 @@ function sendInvite(sdp, authHeader) {
 
 function sendBye() {
   if (!ws || ws.readyState !== 1) return;
-  const tls = callInfo.isTls === 'Y';
+  const tls = !!callInfo._useWss;
   const scheme = tls ? 'sips' : 'sip';
   const transport = tls ? 'WSS' : 'WS';
   const uri = `${scheme}:${callInfo.dialString}@${callInfo.webrtcAddr};transport=${transport}`;
@@ -244,7 +244,7 @@ async function onSipMessage(data) {
     const wwwAuth = headers['www-authenticate'] || '';
     const cseqH = headers['cseq'] || '';
     const method = cseqH.split(' ').pop() || 'REGISTER';
-    const tls = callInfo.isTls === 'Y';
+    const tls = !!callInfo._useWss;
     const scheme = tls ? 'sips' : 'sip';
     const transport = tls ? 'WSS' : 'WS';
     let uri;
@@ -341,8 +341,11 @@ callBtn.onclick = async () => {
     callId = rand(16) + '@esimeasy';
     fromTag = rand(8);
     cseq = 1;
-    const tls = info.isTls === 'Y';
-    const wsUrl = `${tls ? 'wss' : 'ws'}://${info.webrtcAddr}:${info.webrtcPort}/ws`;
+    // Always use wss:// when the page itself is HTTPS (browser blocks ws://).
+    // Fall back to the server's isTls flag only on http:// pages.
+    const useWss = window.location.protocol === 'https:' || info.isTls === 'Y';
+    callInfo._useWss = useWss;
+    const wsUrl = `${useWss ? 'wss' : 'ws'}://${info.webrtcAddr}:${info.webrtcPort}/ws`;
     setStatus('جاري الاتصال بالسيرفر...');
     ws = new WebSocket(wsUrl, 'sip');
     ws.onopen = () => sendRegister(null);
