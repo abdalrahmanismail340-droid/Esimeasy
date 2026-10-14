@@ -19,6 +19,8 @@ from rates import RATES
 
 ESIMEASY_LOGIN_URL = "https://esimapi.esimeasy.co.kr:8444/esimeasyasd/v4/user/login"
 ESIMEASY_CALL_REQ_URL = "https://esimapi.esimeasy.co.kr:8444/baycscsd/outbound/dtls/call/req"
+ESIMEASY_AUTH_REQ_URL = "https://esimapi.esimeasy.co.kr:8444/esimeasyasd/user/authen/whatsapp/req"
+ESIMEASY_AUTH_RES_URL = "https://esimapi.esimeasy.co.kr:8444/esimeasyasd/user/authen/whatsapp/res"
 # AES key/IV the official app uses to encrypt the userId before login
 ESIMEASY_AES_KEY = b"Ykuf2gLd95W?Zfsd"
 
@@ -414,6 +416,83 @@ def api_prefix(code):
         return {"error": "unknown"}, 404
     name, rate = entries[0]
     return {"code": code, "name": name, "rate": rate}
+
+
+def _esimeasy_auth_headers():
+    return {"User-Agent": "okhttp/4.9.3", "Accept": "application/json"}
+
+
+@app.route("/api/phone-auth/req", methods=["POST"])
+def api_phone_auth_req():
+    """Request WhatsApp OTP for phone authentication (mandatory before calls)."""
+    if "user" not in session or "esimeasy" not in session:
+        return {"error": "not logged in"}, 401
+    body = request.get_json(force=True, silent=True) or {}
+    national_id = str(body.get("nationalId", "")).strip()
+    phone_id = str(body.get("phoneId", "")).strip().lstrip("0")
+    if not national_id or not phone_id:
+        return {"error": "nationalId and phoneId required"}, 400
+    esim = session["esimeasy"]
+    device_id = session.get("device_id") or str(uuid.uuid4())
+    session["device_id"] = device_id
+    payload = {
+        "sessionId": esim.get("sessionId", ""),
+        "deviceId": device_id,
+        "nationalId": national_id,
+        "phoneId": phone_id,
+        "appVersion": "3.0.0",
+        "languageCd": "en",
+    }
+    try:
+        r = requests.post(ESIMEASY_AUTH_REQ_URL, json=payload,
+                          headers=_esimeasy_auth_headers(), timeout=15)
+        data = r.json()
+    except Exception as e:
+        return {"error": f"request failed: {e}"}, 502
+    # remember for the verify step
+    session["phone_auth_pending"] = {"nationalId": national_id, "phoneId": phone_id,
+                                     "seqNo": data.get("seqNo", "")}
+    return {"retCode": data.get("retCode"), "seqNo": data.get("seqNo", ""),
+            "retryCount": data.get("retryCount", 0), "raw": str(data)[:300]}
+
+
+@app.route("/api/phone-auth/res", methods=["POST"])
+def api_phone_auth_res():
+    """Submit WhatsApp OTP to complete phone authentication."""
+    if "user" not in session or "esimeasy" not in session:
+        return {"error": "not logged in"}, 401
+    body = request.get_json(force=True, silent=True) or {}
+    pending = session.get("phone_auth_pending") or {}
+    national_id = str(body.get("nationalId") or pending.get("nationalId", "")).strip()
+    phone_id = str(body.get("phoneId") or pending.get("phoneId", "")).strip().lstrip("0")
+    seq_no = str(body.get("seqNo") or pending.get("seqNo", "")).strip()
+    authen_number = str(body.get("authenNumber", "")).strip()
+    if not (national_id and phone_id and authen_number):
+        return {"error": "nationalId, phoneId and authenNumber required"}, 400
+    esim = session["esimeasy"]
+    device_id = session.get("device_id") or str(uuid.uuid4())
+    session["device_id"] = device_id
+    payload = {
+        "sessionId": esim.get("sessionId", ""),
+        "deviceId": device_id,
+        "nationalId": national_id,
+        "phoneId": phone_id,
+        "seqNo": seq_no,
+        "authenNumber": authen_number,
+        "appVersion": "3.0.0",
+        "languageCd": "en",
+    }
+    try:
+        r = requests.post(ESIMEASY_AUTH_RES_URL, json=payload,
+                          headers=_esimeasy_auth_headers(), timeout=15)
+        data = r.json()
+    except Exception as e:
+        return {"error": f"request failed: {e}"}, 502
+    ok = str(data.get("retCode", "")) in ("0", "200", "1")
+    if ok:
+        session["phone_authenticated"] = True
+        session.pop("phone_auth_pending", None)
+    return {"retCode": data.get("retCode"), "ok": ok, "raw": str(data)[:300]}
 
 
 @app.route("/logout")

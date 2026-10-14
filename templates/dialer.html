@@ -42,6 +42,19 @@
   </div>
   <div class="status" id="status">جاهز للاتصال</div>
   <div class="timer" id="timer"></div>
+  <div class="auth-box" id="authBox" style="margin:10px 0; padding:12px; border:1px dashed #ffb74d; border-radius:10px;">
+    <div style="font-size:14px; margin-bottom:8px;">📱 توثيق رقم الموبايل <b>إجباري</b> قبل المكالمات (كود واتساب)</div>
+    <div id="authStep1">
+      <input class="num" id="authPhone" placeholder="رقم الموبايل (مثال: 01044555099)" inputmode="tel" style="width:100%; margin-bottom:8px;">
+      <button onclick="requestAuthCode()" style="width:100%;">ابعت كود الواتساب 📩</button>
+    </div>
+    <div id="authStep2" style="display:none;">
+      <div style="font-size:13px; margin-bottom:8px;">دخل الكود اللي وصلك واتساب:</div>
+      <input class="num" id="authCode" placeholder="كود التوثيق" inputmode="numeric" style="width:100%; margin-bottom:8px;">
+      <button onclick="submitAuthCode()" style="width:100%;">توثيق ✅</button>
+    </div>
+    <div id="authMsg" style="font-size:13px; margin-top:8px;"></div>
+  </div>
   <div class="log-container">
     <div class="log-header">
       <span>📋 SIP Activity Log</span>
@@ -74,6 +87,62 @@ numInput.addEventListener('input', detectCountry);
 numInput.addEventListener('keydown', e => { if (e.key === 'Backspace') setTimeout(detectCountry, 0); });
 
 let detectedPrefix = '';
+let authSeqNo = '';
+async function requestAuthCode() {
+  const v = document.getElementById('authPhone').value.replace(/\D/g, '');
+  const msg = document.getElementById('authMsg');
+  if (!v) { msg.textContent = 'دخل رقم الموبايل الأول'; return; }
+  // استنتاج كود الدولة من الرقم
+  let cc = '', national = v;
+  for (let len = 4; len >= 1; len--) {
+    const p = v.substring(0, len);
+    try {
+      const r = await fetch('/api/prefix/' + p);
+      if (r.ok) { const j = await r.json(); cc = j.code; national = v.substring(len); break; }
+    } catch(e) {}
+  }
+  if (!cc) { msg.textContent = 'مش قادر أحدد كود الدولة من الرقم'; return; }
+  msg.textContent = 'بيبعت الكود واتساب... ⏳';
+  try {
+    const r = await fetch('/api/phone-auth/req', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({nationalId: cc, phoneId: national})
+    });
+    const j = await r.json();
+    if (j.seqNo || String(j.retCode) === '0') {
+      authSeqNo = j.seqNo || '';
+      document.getElementById('authStep1').style.display = 'none';
+      document.getElementById('authStep2').style.display = 'block';
+      msg.textContent = 'الكود اتبعت واتساب ✅ دخله هنا';
+      // حفظ للخطوة التانية
+      document.getElementById('authStep2').dataset.cc = cc;
+      document.getElementById('authStep2').dataset.national = national;
+    } else {
+      msg.textContent = 'فشل: ' + (j.raw || j.error || j.retCode || '؟');
+    }
+  } catch(e) { msg.textContent = 'خطأ: ' + e; }
+}
+async function submitAuthCode() {
+  const code = document.getElementById('authCode').value.replace(/\D/g, '');
+  const msg = document.getElementById('authMsg');
+  const st2 = document.getElementById('authStep2');
+  if (!code) { msg.textContent = 'دخل الكود'; return; }
+  msg.textContent = 'بيتحقق... ⏳';
+  try {
+    const r = await fetch('/api/phone-auth/res', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({nationalId: st2.dataset.cc, phoneId: st2.dataset.national,
+                            seqNo: authSeqNo, authenNumber: code})
+    });
+    const j = await r.json();
+    if (j.ok) {
+      msg.textContent = 'تم التوثيق ✅ تقدر تتصل دلوقتي';
+      document.getElementById('authBox').style.display = 'none';
+    } else {
+      msg.textContent = 'الكود غلط أو فشل: ' + (j.raw || j.error || j.retCode || '؟');
+    }
+  } catch(e) { msg.textContent = 'خطأ: ' + e; }
+}
 async function detectCountry() {
   const v = numInput.value.replace(/\D/g, '');
   detectedPrefix = '';
