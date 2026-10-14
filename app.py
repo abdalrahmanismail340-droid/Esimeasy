@@ -1,13 +1,16 @@
 import os
 import uuid
 import base64
+import threading
 from datetime import timedelta
 from flask import Flask, redirect, url_for, session, render_template, request
+from flask_sock import Sock
 from authlib.integrations.flask_client import OAuth
 from werkzeug.middleware.proxy_fix import ProxyFix
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
 import requests
+import websocket as ws_client
 from rates import RATES
 
 ESIMEASY_LOGIN_URL = "https://esimapi.esimeasy.co.kr:8444/esimeasyasd/v4/user/login"
@@ -44,6 +47,70 @@ google = oauth.register(
     server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
     client_kwargs={"scope": "openid email profile"},
 )
+
+sock = Sock(app)
+
+
+@sock.route("/ws-proxy")
+def ws_proxy(ws):
+    """Relay browser wss:// <-> eSIMEasy ws:// (browser blocks plain ws from HTTPS)."""
+    if "user" not in session:
+        ws.close()
+        return
+    target_host = request.args.get("host", "")
+    target_port = request.args.get("port", "")
+    if not target_host or not target_port:
+        ws.close()
+        return
+    target_url = f"ws://{target_host}:{target_port}/ws"
+    try:
+        backend = ws_client.create_connection(
+            target_url, subprotocols=["sip"], timeout=10)
+    except Exception:
+        try:
+            ws.close()
+        except Exception:
+            pass
+        return
+
+    stop = threading.Event()
+
+    def backend_to_browser():
+        try:
+            while not stop.is_set():
+                try:
+                    msg = backend.recv()
+                except Exception:
+                    break
+                if msg is None:
+                    break
+                try:
+                    ws.send(msg)
+                except Exception:
+                    break
+        finally:
+            stop.set()
+
+    t = threading.Thread(target=backend_to_browser, daemon=True)
+    t.start()
+    try:
+        while not stop.is_set():
+            try:
+                msg = ws.receive(timeout=30)
+            except Exception:
+                break
+            if msg is None:
+                break
+            try:
+                backend.send(msg)
+            except Exception:
+                break
+    finally:
+        stop.set()
+        try:
+            backend.close()
+        except Exception:
+            pass
 
 
 @app.route("/")

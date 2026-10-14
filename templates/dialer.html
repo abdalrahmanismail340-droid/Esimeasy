@@ -341,11 +341,11 @@ callBtn.onclick = async () => {
     callId = rand(16) + '@esimeasy';
     fromTag = rand(8);
     cseq = 1;
-    // Always use wss:// when the page itself is HTTPS (browser blocks ws://).
-    // Fall back to the server's isTls flag only on http:// pages.
-    const useWss = window.location.protocol === 'https:' || info.isTls === 'Y';
-    callInfo._useWss = useWss;
-    const wsUrl = `${useWss ? 'wss' : 'ws'}://${info.webrtcAddr}:${info.webrtcPort}/ws`;
+    // SIP URIs describe the backend's plain-ws hop (like the app when isTls!=Y)
+    callInfo._useWss = false;
+    // Connect via our backend proxy (wss) which relays to eSIMEasy's plain ws.
+    // Browser blocks ws:// from HTTPS pages, so we never connect directly.
+    const wsUrl = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws-proxy?host=${encodeURIComponent(info.webrtcAddr)}&port=${encodeURIComponent(info.webrtcPort)}`;
     setStatus('جاري الاتصال بالسيرفر...');
     ws = new WebSocket(wsUrl, 'sip');
     ws.onopen = () => sendRegister(null);
