@@ -79,7 +79,6 @@ async function detectCountry() {
   detectedPrefix = '';
   document.getElementById('countryInfo').textContent = '';
   if (!v) return;
-  // longest dial-code prefix match (1-6 digits)
   for (let len = Math.min(v.length, 6); len >= 1; len--) {
     const p = v.substring(0, len);
     try {
@@ -146,7 +145,7 @@ const remoteAudio = document.getElementById('remoteAudio');
 
 let ws = null, pc = null, callInfo = null;
 let cseq = 1, callId = '', fromTag = '', toTag = '';
-let registered = false, inviteSent = false;
+let registered = false, inviteSent = false, inviteVariant = 0;
 let timerInt = null, callStart = 0;
 let pendingSdp = null, proxyFailed = false, uiEnded = false;
 
@@ -191,15 +190,34 @@ function buildAuthHeader(challenge, method, uri) {
   return h;
 }
 
+function getTargetDialUser() {
+  // تعدد صيغ الرقم المطلوب لو السيرفر رفض الصيغة الأولى بـ 404
+  const variants = [
+    callInfo.dialString,                        // e.g. 201044555099
+    '+' + callInfo.dialString,                  // e.g. +201044555099
+    '00' + callInfo.dialString,                 // e.g. 00201044555099
+  ];
+  return variants[inviteVariant] || callInfo.dialString;
+}
+
 function sipMsg(method, uri, extraHeaders, body) {
-  const host = `${callInfo.webrtcAddr}:${callInfo.webrtcPort}`;
+  const tls = !!callInfo._useWss;
+  const transportUpper = tls ? 'WSS' : 'WS';
+  const transportLower = tls ? 'wss' : 'ws';
+  const defaultTo = (method === 'REGISTER')
+    ? `<sip:${callInfo.webrtcId}@${callInfo.webrtcAddr}>`
+    : `<sip:${getTargetDialUser()}@${callInfo.webrtcAddr}>`;
+
   let msg = `${method} ${uri} SIP/2.0\r\n`;
-  msg += `Via: SIP/2.0/WS df7jal23ls0d.invalid;branch=z9hG4bK${rand(10)}\r\n`;
+  msg += `Via: SIP/2.0/${transportUpper} df7jal23ls0d.invalid;branch=z9hG4bK${rand(10)};rport\r\n`;
   msg += `From: "${callInfo.uniqueId}" <sip:${callInfo.webrtcId}@${callInfo.webrtcAddr}>;tag=${fromTag}\r\n`;
-  msg += `To: ${extraHeaders.to || `<sip:${callInfo.dialString}@${callInfo.webrtcAddr}>`}\r\n`;
+  msg += `To: ${extraHeaders.to || defaultTo}\r\n`;
   msg += `Call-ID: ${callId}\r\n`;
   msg += `CSeq: ${cseq++} ${method}\r\n`;
-  msg += `Contact: <sip:${callInfo.webrtcId}@df7jal23ls0d.invalid;transport=ws>\r\n`;
+  msg += `Contact: <sip:${callInfo.webrtcId}@df7jal23ls0d.invalid;transport=${transportLower}>\r\n`;
+  if (method === 'REGISTER') {
+    msg += `Expires: 600\r\n`;
+  }
   msg += `Max-Forwards: 70\r\n`;
   msg += `User-Agent: Softbay-Android\r\n`;
   msg += `Organization: Softbay\r\n`;
@@ -221,18 +239,23 @@ function sendRegister(authHeader) {
   const scheme = tls ? 'sips' : 'sip';
   const transport = tls ? 'WSS' : 'WS';
   const uri = `${scheme}:${callInfo.webrtcAddr};transport=${transport}`;
-  const headers = {};
+  const headers = {
+    'to': `<sip:${callInfo.webrtcId}@${callInfo.webrtcAddr}>`
+  };
   if (authHeader) headers['Authorization'] = authHeader;
   ws.send(sipMsg('REGISTER', uri, headers, null));
 }
 
-function sendInvite(sdp, authHeader) {
+function sendInvite(sdp, authHeader, authHeaderName = 'Authorization') {
   const tls = !!callInfo._useWss;
   const scheme = tls ? 'sips' : 'sip';
   const transport = tls ? 'WSS' : 'WS';
-  const uri = `${scheme}:${callInfo.dialString}@${callInfo.webrtcAddr};transport=${transport}`;
-  const headers = {};
-  if (authHeader) headers['Authorization'] = authHeader;
+  const dialUser = getTargetDialUser();
+  const uri = `${scheme}:${dialUser}@${callInfo.webrtcAddr};transport=${transport}`;
+  const headers = {
+    'to': `<sip:${dialUser}@${callInfo.webrtcAddr}>`
+  };
+  if (authHeader) headers[authHeaderName] = authHeader;
   ws.send(sipMsg('INVITE', uri, headers, sdp));
   inviteSent = true;
 }
@@ -242,9 +265,10 @@ function sendAck() {
   const tls = !!callInfo._useWss;
   const scheme = tls ? 'sips' : 'sip';
   const transport = tls ? 'WSS' : 'WS';
-  const uri = `${scheme}:${callInfo.dialString}@${callInfo.webrtcAddr};transport=${transport}`;
+  const dialUser = getTargetDialUser();
+  const uri = `${scheme}:${dialUser}@${callInfo.webrtcAddr};transport=${transport}`;
   const headers = {};
-  if (toTag) headers['to'] = `<sip:${callInfo.dialString}@${callInfo.webrtcAddr}>;tag=${toTag}`;
+  if (toTag) headers['to'] = `<sip:${dialUser}@${callInfo.webrtcAddr}>;tag=${toTag}`;
   ws.send(sipMsg('ACK', uri, headers, null));
 }
 
@@ -253,9 +277,10 @@ function sendBye() {
   const tls = !!callInfo._useWss;
   const scheme = tls ? 'sips' : 'sip';
   const transport = tls ? 'WSS' : 'WS';
-  const uri = `${scheme}:${callInfo.dialString}@${callInfo.webrtcAddr};transport=${transport}`;
+  const dialUser = getTargetDialUser();
+  const uri = `${scheme}:${dialUser}@${callInfo.webrtcAddr};transport=${transport}`;
   const headers = {};
-  if (toTag) headers['to'] = `<sip:${callInfo.dialString}@${callInfo.webrtcAddr}>;tag=${toTag}`;
+  if (toTag) headers['to'] = `<sip:${dialUser}@${callInfo.webrtcAddr}>;tag=${toTag}`;
   ws.send(sipMsg('BYE', uri, headers, null));
 }
 
@@ -279,31 +304,33 @@ function parseSip(data) {
 
 async function onSipMessage(data) {
   const { start, headers, body } = parseSip(data);
+  const cseqH = headers['cseq'] || '';
+  const method = cseqH.split(' ').pop() || 'REGISTER';
+
   if (start.startsWith('SIP/2.0 401') || start.startsWith('SIP/2.0 407')) {
     const wwwAuth = headers['www-authenticate'] || headers['proxy-authenticate'] || '';
     const authHeaderName = start.startsWith('SIP/2.0 407') ? 'Proxy-Authorization' : 'Authorization';
-    const cseqH = headers['cseq'] || '';
-    const method = cseqH.split(' ').pop() || 'REGISTER';
     const tls = !!callInfo._useWss;
     const scheme = tls ? 'sips' : 'sip';
     const transport = tls ? 'WSS' : 'WS';
+    const dialUser = getTargetDialUser();
     let uri;
     if (method === 'REGISTER') uri = `${scheme}:${callInfo.webrtcAddr};transport=${transport}`;
-    else uri = `${scheme}:${callInfo.dialString}@${callInfo.webrtcAddr};transport=${transport}`;
+    else uri = `${scheme}:${dialUser}@${callInfo.webrtcAddr};transport=${transport}`;
     const auth = buildAuthHeader(wwwAuth, method, uri);
     if (method === 'REGISTER') {
-      setStatus('تسجيل الدخول بالسيرفر...');
+      setStatus('توثيق الدخول (REGISTER)...');
       sendRegister(auth);
     } else if (pendingSdp) {
-      const extra = {};
-      extra[authHeaderName] = auth;
-      ws.send(sipMsg('INVITE', uri, extra, pendingSdp));
+      setStatus('توثيق المكالمة (INVITE)...');
+      sendInvite(pendingSdp, auth, authHeaderName);
     }
+  } else if (start.startsWith('SIP/2.0 100')) {
+    setStatus('جاري المعالجة (100)...');
   } else if (start.startsWith('SIP/2.0 200')) {
-    const cseqH = headers['cseq'] || '';
     if (cseqH.includes('REGISTER')) {
       registered = true;
-      setStatus('جاري الاتصال...');
+      setStatus('تم التسجيل ✅ جاري طلب الرقم...');
       await startMedia();
     } else if (cseqH.includes('INVITE')) {
       setStatus('متصل ✅');
@@ -327,8 +354,14 @@ async function onSipMessage(data) {
     if (body && pc && !pc.remoteDescription) {
       try { await pc.setRemoteDescription({ type: 'answer', sdp: body }); } catch(e) {}
     }
+  } else if (start.startsWith('SIP/2.0 404') && method === 'INVITE' && inviteVariant < 2 && pendingSdp) {
+    // لو السيرفر رد 404 على صيغة الرقم في الـ INVITE، نجرب الصيغة اللي بعدها (+ أو 00) تلقائياً
+    inviteVariant++;
+    setStatus(`تجربة صيغة رقم بديلة (${inviteVariant})...`);
+    sendInvite(pendingSdp, null);
   } else if (start.match(/^SIP\/2\.0 [4-6]\d\d/)) {
-    endCallUI('فشل الاتصال (' + start.substring(8, 11) + ')');
+    const code = start.substring(8, 11);
+    endCallUI(`فشل الاتصال (${code} عند ${method})`);
   } else if (start.startsWith('BYE')) {
     endCallUI('الطرف الآخر أنهى المكالمة');
   }
@@ -389,6 +422,7 @@ callBtn.onclick = async () => {
     callId = rand(16) + '@esimeasy';
     fromTag = rand(8);
     cseq = 1;
+    inviteVariant = 0;
     const isTlsFlag = (info.isTls === 'Y' || info.isTls === true) ? '1' : '0';
     callInfo._useWss = isTlsFlag === '1';
 
