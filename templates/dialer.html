@@ -6,22 +6,23 @@
 <title>الدايلر — مكالمة حقيقية</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', Tahoma, sans-serif; background: linear-gradient(135deg, #1a1a2e, #16213e); min-height: 100vh; display: flex; align-items: center; justify-content: center; color: #fff; }
-  .card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 20px; padding: 32px; text-align: center; max-width: 420px; width: 92%; }
+  body { font-family: 'Segoe UI', Tahoma, sans-serif; background: linear-gradient(135deg, #1a1a2e, #16213e); min-height: 100vh; display: flex; align-items: center; justify-content: center; color: #fff; padding: 12px 0; }
+  .card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 20px; padding: 28px 24px; text-align: center; max-width: 420px; width: 92%; }
   h1 { font-size: 20px; margin-bottom: 6px; }
-  .balance { color: #81c784; font-size: 14px; margin-bottom: 20px; }
-  .display { background: rgba(0,0,0,0.35); border-radius: 12px; padding: 16px; font-size: 26px; letter-spacing: 2px; min-height: 66px; margin-bottom: 8px; direction: ltr; overflow-x: auto; white-space: nowrap; }
-  .country { font-size: 14px; color: #4fc3f7; margin-bottom: 14px; min-height: 20px; }
+  .balance { color: #81c784; font-size: 14px; margin-bottom: 16px; }
+  .display { background: rgba(0,0,0,0.35); border-radius: 12px; padding: 14px; font-size: 26px; letter-spacing: 2px; min-height: 62px; margin-bottom: 8px; direction: ltr; overflow-x: auto; white-space: nowrap; }
+  .country { font-size: 14px; color: #4fc3f7; margin-bottom: 12px; min-height: 20px; }
   .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
-  .pad button { font-size: 22px; padding: 14px 0; border-radius: 50%; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.06); color: #fff; cursor: pointer; aspect-ratio: 1; max-width: 76px; margin: 0 auto; width: 100%; }
+  .pad button { font-size: 22px; padding: 12px 0; border-radius: 50%; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.06); color: #fff; cursor: pointer; aspect-ratio: 1; max-width: 72px; margin: 0 auto; width: 100%; }
   .pad button:active { background: rgba(255,255,255,0.2); }
   .pad button small { display: block; font-size: 10px; color: #888; }
-  .actions { display: flex; gap: 12px; justify-content: center; margin-bottom: 12px; }
-  .call-btn { width: 72px; height: 72px; border-radius: 50%; border: none; font-size: 30px; cursor: pointer; background: #2e7d32; color: #fff; }
-  .hang-btn { width: 72px; height: 72px; border-radius: 50%; border: none; font-size: 30px; cursor: pointer; background: #c62828; color: #fff; display: none; }
-  .status { font-size: 14px; color: #aaa; min-height: 22px; margin-bottom: 8px; word-break: break-word; }
-  .timer { font-size: 15px; color: #81c784; min-height: 22px; direction: ltr; }
-  .back { display: inline-block; margin-top: 14px; color: #888; text-decoration: none; font-size: 13px; }
+  .actions { display: flex; gap: 12px; justify-content: center; margin-bottom: 10px; }
+  .call-btn { width: 68px; height: 68px; border-radius: 50%; border: none; font-size: 28px; cursor: pointer; background: #2e7d32; color: #fff; }
+  .hang-btn { width: 68px; height: 68px; border-radius: 50%; border: none; font-size: 28px; cursor: pointer; background: #c62828; color: #fff; display: none; }
+  .status { font-size: 14px; color: #ffd54f; min-height: 22px; margin-bottom: 6px; word-break: break-word; }
+  .timer { font-size: 15px; color: #81c784; min-height: 20px; direction: ltr; }
+  .sip-log { background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 8px; margin-top: 10px; font-family: monospace; font-size: 11px; color: #80cbc4; direction: ltr; text-align: left; max-height: 130px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+  .back { display: inline-block; margin-top: 12px; color: #888; text-decoration: none; font-size: 13px; }
   input.num { width: 100%; background: transparent; border: none; color: #fff; font-size: 26px; text-align: center; letter-spacing: 2px; outline: none; direction: ltr; }
 </style>
 </head>
@@ -38,14 +39,22 @@
   </div>
   <div class="status" id="status"></div>
   <div class="timer" id="timer"></div>
+  <div class="sip-log" id="sipLog">SIP Log: جاهز...</div>
   <a class="back" href="/">← رجوع</a>
-  <div style="margin-top:10px;font-size:11px;color:#666;">
+  <div style="margin-top:8px;font-size:11px;color:#666;">
     <a href="#" id="wsTest" style="color:#666;">اختبار الاتصال</a> <span id="wsTestResult"></span>
   </div>
 </div>
-<audio id="remoteAudio" autoplay></audio>
+<audio id="remoteAudio" autoplay playsinline></audio>
 
 <script>
+const sipLogEl = document.getElementById('sipLog');
+function logSip(msg) {
+  const t = new Date().toLocaleTimeString('en-US', { hour12: false });
+  sipLogEl.textContent += `\n[${t}] ${msg}`;
+  sipLogEl.scrollTop = sipLogEl.scrollHeight;
+}
+
 // ---------- WebSocket self-test ----------
 document.getElementById('wsTest').onclick = async (e) => {
   e.preventDefault();
@@ -60,6 +69,7 @@ document.getElementById('wsTest').onclick = async (e) => {
     setTimeout(() => { if (out.textContent === '...') { out.textContent = '❌ مهلة'; try{t.close();}catch(_){}} }, 8000);
   } catch (err) { out.textContent = '❌ ' + err.message; }
 };
+
 // ---------- keypad ----------
 const pad = document.getElementById('pad');
 const numInput = document.getElementById('numInput');
@@ -94,7 +104,7 @@ async function detectCountry() {
   }
 }
 
-// ---------- MD5 (for SIP digest auth) ----------
+// ---------- MD5 ----------
 function md5(str) {
   function rl(n, c) { return (n << c) | (n >>> (32 - c)); }
   function add(x, y) { const l = (x & 0xffff) + (y & 0xffff); return ((x >> 16) + (y >> 16) + (l >> 16) << 16) | (l & 0xffff); }
@@ -143,8 +153,10 @@ const callBtn = document.getElementById('callBtn');
 const hangBtn = document.getElementById('hangBtn');
 const remoteAudio = document.getElementById('remoteAudio');
 
-let ws = null, pc = null, callInfo = null;
-let cseq = 1, callId = '', fromTag = '', toTag = '';
+let ws = null, pc = null, localStream = null, callInfo = null;
+let regCallId = '', regFromTag = '', regCseq = 1;
+let invCallId = '', invFromTag = '', invCseq = 1, toTag = '';
+let lastInviteSeq = 1, lastInviteBranch = '';
 let registered = false, inviteSent = false, inviteVariant = 0;
 let timerInt = null, callStart = 0;
 let pendingSdp = null, proxyFailed = false, uiEnded = false;
@@ -191,31 +203,63 @@ function buildAuthHeader(challenge, method, uri) {
 }
 
 function getTargetDialUser() {
-  // تعدد صيغ الرقم المطلوب لو السيرفر رفض الصيغة الأولى بـ 404
   const variants = [
-    callInfo.dialString,                        // e.g. 201044555099
-    '+' + callInfo.dialString,                  // e.g. +201044555099
-    '00' + callInfo.dialString,                 // e.g. 00201044555099
+    callInfo.dialString,
+    '+' + callInfo.dialString,
+    '00' + callInfo.dialString,
   ];
   return variants[inviteVariant] || callInfo.dialString;
 }
 
-function sipMsg(method, uri, extraHeaders, body) {
+// تنظيف وتصغير الـ SDP عشان سيرفر الـ SIP القديم ميعلقش أو يرفضه
+function cleanSdpForSip(sdp) {
+  const lines = sdp.split(/\r?\n/);
+  const out = [];
+  for (const line of lines) {
+    if (!line) continue;
+    // استبعاد إضافات المتصفح الطويلة والـ mDNS candidates (.local) اللي بتلخبط السيرفر
+    if (line.startsWith('a=extmap:')) continue;
+    if (line.startsWith('a=msid-semantic:')) continue;
+    if (line.startsWith('a=ssrc-group:')) continue;
+    if (line.startsWith('a=candidate:') && line.includes('.local')) continue;
+    out.push(line);
+  }
+  return out.join('\r\n') + '\r\n';
+}
+
+function sipMsg(method, uri, extraHeaders, body, customBranch) {
   const tls = !!callInfo._useWss;
   const transportUpper = tls ? 'WSS' : 'WS';
   const transportLower = tls ? 'wss' : 'ws';
-  const defaultTo = (method === 'REGISTER')
+
+  const isReg = (method === 'REGISTER');
+  const activeCallId = isReg ? regCallId : invCallId;
+  const activeFromTag = isReg ? regFromTag : invFromTag;
+  let seqNum;
+  if (isReg) {
+    seqNum = regCseq++;
+  } else if (method === 'ACK') {
+    seqNum = lastInviteSeq;
+  } else {
+    seqNum = invCseq++;
+    if (method === 'INVITE') lastInviteSeq = seqNum;
+  }
+
+  const branch = customBranch || ('z9hG4bK' + rand(12));
+  if (method === 'INVITE') lastInviteBranch = branch;
+
+  const defaultTo = isReg
     ? `<sip:${callInfo.webrtcId}@${callInfo.webrtcAddr}>`
     : `<sip:${getTargetDialUser()}@${callInfo.webrtcAddr}>`;
 
   let msg = `${method} ${uri} SIP/2.0\r\n`;
-  msg += `Via: SIP/2.0/${transportUpper} df7jal23ls0d.invalid;branch=z9hG4bK${rand(10)};rport\r\n`;
-  msg += `From: "${callInfo.uniqueId}" <sip:${callInfo.webrtcId}@${callInfo.webrtcAddr}>;tag=${fromTag}\r\n`;
+  msg += `Via: SIP/2.0/${transportUpper} df7jal23ls0d.invalid;branch=${branch};rport\r\n`;
+  msg += `From: "${callInfo.uniqueId}" <sip:${callInfo.webrtcId}@${callInfo.webrtcAddr}>;tag=${activeFromTag}\r\n`;
   msg += `To: ${extraHeaders.to || defaultTo}\r\n`;
-  msg += `Call-ID: ${callId}\r\n`;
-  msg += `CSeq: ${cseq++} ${method}\r\n`;
+  msg += `Call-ID: ${activeCallId}\r\n`;
+  msg += `CSeq: ${seqNum} ${method}\r\n`;
   msg += `Contact: <sip:${callInfo.webrtcId}@df7jal23ls0d.invalid;transport=${transportLower}>\r\n`;
-  if (method === 'REGISTER') {
+  if (isReg) {
     msg += `Expires: 600\r\n`;
   }
   msg += `Max-Forwards: 70\r\n`;
@@ -243,6 +287,7 @@ function sendRegister(authHeader) {
     'to': `<sip:${callInfo.webrtcId}@${callInfo.webrtcAddr}>`
   };
   if (authHeader) headers['Authorization'] = authHeader;
+  logSip(`-> REGISTER ${authHeader ? '(Auth)' : ''}`);
   ws.send(sipMsg('REGISTER', uri, headers, null));
 }
 
@@ -256,11 +301,12 @@ function sendInvite(sdp, authHeader, authHeaderName = 'Authorization') {
     'to': `<sip:${dialUser}@${callInfo.webrtcAddr}>`
   };
   if (authHeader) headers[authHeaderName] = authHeader;
+  logSip(`-> INVITE ${dialUser} ${authHeader ? '(' + authHeaderName + ')' : ''} [SDP:${sdp.length}B]`);
   ws.send(sipMsg('INVITE', uri, headers, sdp));
   inviteSent = true;
 }
 
-function sendAck() {
+function sendAck(customToHeader, isErrorAck = false) {
   if (!ws || ws.readyState !== 1) return;
   const tls = !!callInfo._useWss;
   const scheme = tls ? 'sips' : 'sip';
@@ -268,8 +314,14 @@ function sendAck() {
   const dialUser = getTargetDialUser();
   const uri = `${scheme}:${dialUser}@${callInfo.webrtcAddr};transport=${transport}`;
   const headers = {};
-  if (toTag) headers['to'] = `<sip:${dialUser}@${callInfo.webrtcAddr}>;tag=${toTag}`;
-  ws.send(sipMsg('ACK', uri, headers, null));
+  if (customToHeader) {
+    headers['to'] = customToHeader;
+  } else if (toTag) {
+    headers['to'] = `<sip:${dialUser}@${callInfo.webrtcAddr}>;tag=${toTag}`;
+  }
+  logSip(`-> ACK`);
+  // Error ACK (for 401/407) must reuse the exact same Via branch as the INVITE
+  ws.send(sipMsg('ACK', uri, headers, null, isErrorAck ? lastInviteBranch : null));
 }
 
 function sendBye() {
@@ -281,6 +333,7 @@ function sendBye() {
   const uri = `${scheme}:${dialUser}@${callInfo.webrtcAddr};transport=${transport}`;
   const headers = {};
   if (toTag) headers['to'] = `<sip:${dialUser}@${callInfo.webrtcAddr}>;tag=${toTag}`;
+  logSip(`-> BYE`);
   ws.send(sipMsg('BYE', uri, headers, null));
 }
 
@@ -289,7 +342,7 @@ function parseSip(data) {
   const head = headEnd >= 0 ? data.substring(0, headEnd) : data;
   const body = headEnd >= 0 ? data.substring(headEnd + 4) : '';
   const lines = head.split('\r\n');
-  const start = lines[0] || '';
+  const start = (lines[0] || '').trim();
   const headers = {};
   for (let i = 1; i < lines.length; i++) {
     const idx = lines[i].indexOf(':');
@@ -303,9 +356,13 @@ function parseSip(data) {
 }
 
 async function onSipMessage(data) {
+  if (!data || !data.trim()) return;
   const { start, headers, body } = parseSip(data);
+  if (!start) return;
+
   const cseqH = headers['cseq'] || '';
   const method = cseqH.split(' ').pop() || 'REGISTER';
+  logSip(`<- ${start} [${method}]`);
 
   if (start.startsWith('SIP/2.0 401') || start.startsWith('SIP/2.0 407')) {
     const wwwAuth = headers['www-authenticate'] || headers['proxy-authenticate'] || '';
@@ -322,16 +379,34 @@ async function onSipMessage(data) {
       setStatus('توثيق الدخول (REGISTER)...');
       sendRegister(auth);
     } else if (pendingSdp) {
-      setStatus('توثيق المكالمة (INVITE)...');
+      // في SIP لازم نبعت ACK على الـ 401/407 بتاع الـ INVITE الأول قبل إعادة الإرسال
+      sendAck(headers['to'], true);
+      setStatus('توثيق المكالمة (INVITE Auth)...');
       sendInvite(pendingSdp, auth, authHeaderName);
     }
   } else if (start.startsWith('SIP/2.0 100')) {
-    setStatus('جاري المعالجة (100)...');
+    setStatus('جاري فتح الخط (100 Trying)...');
+  } else if (start.startsWith('SIP/2.0 180') || start.startsWith('SIP/2.0 183')) {
+    setStatus('بيرن دلوقتي... 📲');
+    const toH = headers['to'] || '';
+    const m = toH.match(/tag=([^\s;,]+)/);
+    if (m) toTag = m[1];
+    if (body && pc && !pc.remoteDescription) {
+      logSip(`<- Early Media SDP (${body.length}B)`);
+      try {
+        await pc.setRemoteDescription({ type: 'answer', sdp: body });
+        remoteAudio.play().catch(() => {});
+      } catch(e) {
+        logSip(`SDP Err: ${e.message}`);
+      }
+    }
   } else if (start.startsWith('SIP/2.0 200')) {
     if (cseqH.includes('REGISTER')) {
-      registered = true;
-      setStatus('تم التسجيل ✅ جاري طلب الرقم...');
-      await startMedia();
+      if (!registered) {
+        registered = true;
+        setStatus('تم التسجيل ✅ تجهيز الصوت...');
+        await startMedia();
+      }
     } else if (cseqH.includes('INVITE')) {
       setStatus('متصل ✅');
       const toH = headers['to'] || '';
@@ -339,66 +414,126 @@ async function onSipMessage(data) {
       if (m) toTag = m[1];
       sendAck();
       if (body && pc) {
-        await pc.setRemoteDescription({ type: 'answer', sdp: body });
+        logSip(`<- 200 OK SDP (${body.length}B)`);
+        try {
+          if (!pc.remoteDescription) {
+            await pc.setRemoteDescription({ type: 'answer', sdp: body });
+          }
+          remoteAudio.play().catch(() => {});
+        } catch(e) {
+          logSip(`SDP200 Err: ${e.message}`);
+        }
       }
-      callStart = Date.now();
-      timerInt = setInterval(() => {
-        const s = Math.floor((Date.now() - callStart) / 1000);
-        timerEl.textContent = `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
-      }, 1000);
+      if (!timerInt) {
+        callStart = Date.now();
+        timerInt = setInterval(() => {
+          const s = Math.floor((Date.now() - callStart) / 1000);
+          timerEl.textContent = `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+        }, 1000);
+      }
     } else if (cseqH.includes('BYE')) {
       endCallUI('انتهت المكالمة');
     }
-  } else if (start.startsWith('SIP/2.0 180') || start.startsWith('SIP/2.0 183')) {
-    setStatus('جرس... 📲');
-    if (body && pc && !pc.remoteDescription) {
-      try { await pc.setRemoteDescription({ type: 'answer', sdp: body }); } catch(e) {}
-    }
   } else if (start.startsWith('SIP/2.0 404') && method === 'INVITE' && inviteVariant < 2 && pendingSdp) {
-    // لو السيرفر رد 404 على صيغة الرقم في الـ INVITE، نجرب الصيغة اللي بعدها (+ أو 00) تلقائياً
+    sendAck(headers['to'], true);
     inviteVariant++;
+    invCallId = rand(16) + '@esimeasy';
+    invFromTag = rand(8);
     setStatus(`تجربة صيغة رقم بديلة (${inviteVariant})...`);
     sendInvite(pendingSdp, null);
   } else if (start.match(/^SIP\/2\.0 [4-6]\d\d/)) {
+    if (method === 'INVITE') sendAck(headers['to'], true);
     const code = start.substring(8, 11);
-    endCallUI(`فشل الاتصال (${code} عند ${method})`);
+    endCallUI(`رفض من السيرفر (${code} عند ${method})`);
   } else if (start.startsWith('BYE')) {
     endCallUI('الطرف الآخر أنهى المكالمة');
+  } else if (start.startsWith('OPTIONS') || start.startsWith('NOTIFY') || start.startsWith('INFO')) {
+    const via = headers['via'] || '';
+    const from = headers['from'] || '';
+    const to = headers['to'] || '';
+    const cid = headers['call-id'] || '';
+    const cs = headers['cseq'] || '';
+    let reply = `SIP/2.0 200 OK\r\nVia: ${via}\r\nFrom: ${from}\r\nTo: ${to}\r\nCall-ID: ${cid}\r\nCSeq: ${cs}\r\nContent-Length: 0\r\n\r\n`;
+    ws.send(reply);
   }
 }
 
 async function startMedia() {
-  const iceServers = [];
-  if (callInfo.stunAddr) iceServers.push({ urls: 'stun:' + callInfo.stunAddr });
-  if ((callInfo.isTurn === 'Y' || callInfo.isTurn === true) && callInfo.turnAddr) {
-    iceServers.push({ urls: 'turn:' + callInfo.turnAddr, username: callInfo.turnId, credential: callInfo.turnPwd });
-  }
-  pc = new RTCPeerConnection({ iceServers });
-  pc.ontrack = e => { remoteAudio.srcObject = e.streams[0]; };
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    stream.getTracks().forEach(t => pc.addTrack(t, stream));
+    setStatus('طلب إذن الميكروفون...');
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
   } catch (e) {
-    setStatus('تعذر الوصول للميكروفون');
+    endCallUI('تعذر الوصول للميكروفون: ' + e.message);
     return;
   }
-  const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
-  await pc.setLocalDescription(offer);
-  await new Promise(res => {
-    if (pc.iceGatheringState === 'complete') return res();
-    pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === 'complete') res(); };
-    setTimeout(res, 3500);
-  });
-  pendingSdp = pc.localDescription.sdp;
-  sendInvite(pendingSdp, null);
+
+  try {
+    setStatus('تجهيز قناة الصوت (WebRTC)...');
+    const iceServers = [
+      { urls: 'stun:stun.l.google.com:19302' }
+    ];
+    if (callInfo.stunAddr) {
+      const stunClean = callInfo.stunAddr.replace(/^stun:/i, '').trim();
+      if (stunClean) iceServers.push({ urls: 'stun:' + stunClean });
+    }
+    if ((callInfo.isTurn === 'Y' || callInfo.isTurn === true) && callInfo.turnAddr) {
+      const turnClean = callInfo.turnAddr.replace(/^turn:/i, '').trim();
+      if (turnClean) {
+        iceServers.push({
+          urls: 'turn:' + turnClean,
+          username: String(callInfo.turnId || ''),
+          credential: String(callInfo.turnPwd || '')
+        });
+      }
+    }
+
+    pc = new RTCPeerConnection({ iceServers });
+    pc.ontrack = e => {
+      logSip(`Media track received!`);
+      if (e.streams && e.streams[0]) {
+        remoteAudio.srcObject = e.streams[0];
+        remoteAudio.play().catch(err => logSip(`Audio play err: ${err.message}`));
+      }
+    };
+    pc.oniceconnectionstatechange = () => {
+      if (pc) logSip(`ICE State: ${pc.iceConnectionState}`);
+    };
+
+    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+
+    const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
+    await pc.setLocalDescription(offer);
+
+    setStatus('تجميع مسارات الصوت (ICE)...');
+    await new Promise(res => {
+      if (pc.iceGatheringState === 'complete') return res();
+      let resolved = false;
+      const done = () => { if (!resolved) { resolved = true; res(); } };
+      pc.onicecandidate = e => {
+        if (!e.candidate) done();
+      };
+      setTimeout(done, 2000);
+    });
+
+    if (!pc || !pc.localDescription) return;
+    pendingSdp = cleanSdpForSip(pc.localDescription.sdp);
+    setStatus('تم إرسال طلب الرن (INVITE)...');
+    sendInvite(pendingSdp, null);
+  } catch (err) {
+    endCallUI('خطأ في تجهيز الصوت: ' + err.message);
+  }
 }
 
 function endCallUI(msg) {
   setStatus(msg || 'انتهت المكالمة');
-  clearInterval(timerInt);
+  if (timerInt) { clearInterval(timerInt); timerInt = null; }
   callBtn.style.display = '';
   hangBtn.style.display = 'none';
-  if (pc) { pc.close(); pc = null; }
+  if (localStream) {
+    localStream.getTracks().forEach(t => t.stop());
+    localStream = null;
+  }
+  if (pc) { try { pc.close(); } catch(e){} pc = null; }
   if (ws && ws.readyState === 1) { try { ws.close(); } catch(e){} }
   ws = null; registered = false; inviteSent = false; pendingSdp = null; toTag = ''; uiEnded = true;
 }
@@ -409,6 +544,10 @@ callBtn.onclick = async () => {
   if (!detectedPrefix) { setStatus('تعذر تحديد كود الدولة'); return; }
   const number = raw.startsWith(detectedPrefix) ? raw.substring(detectedPrefix.length) : raw;
   setStatus('تجهيز المكالمة...');
+  timerEl.textContent = '';
+  sipLogEl.textContent = 'SIP Log: بدء الاتصال...';
+  // فك قفل الصوت في متصفح الموبايل بمجرد ضغط المستخدم على الزرار
+  remoteAudio.play().catch(() => {});
   callBtn.style.display = 'none';
   try {
     const r = await fetch('/api/call/setup', {
@@ -419,10 +558,16 @@ callBtn.onclick = async () => {
     const info = await r.json();
     if (info.error) { setStatus('خطأ: ' + info.error); callBtn.style.display = ''; return; }
     callInfo = info;
-    callId = rand(16) + '@esimeasy';
-    fromTag = rand(8);
-    cseq = 1;
+    logSip(`Setup OK: ${info.webrtcAddr}:${info.webrtcPort} id=${info.webrtcId} dtls=${info.isDtls} turn=${info.isTurn}`);
+
+    regCallId = rand(16) + '@esimeasy';
+    regFromTag = rand(8);
+    regCseq = 1;
+    invCallId = rand(16) + '@esimeasy';
+    invFromTag = rand(8);
+    invCseq = 1;
     inviteVariant = 0;
+
     const isTlsFlag = (info.isTls === 'Y' || info.isTls === true) ? '1' : '0';
     callInfo._useWss = isTlsFlag === '1';
 
@@ -438,7 +583,7 @@ callBtn.onclick = async () => {
     ws.onmessage = e => {
       if (typeof e.data === 'string' && e.data.startsWith('ERROR:diag:')) {
         const diagMsg = e.data.slice(11);
-        setStatus('🔍 ' + diagMsg);
+        logSip(`Proxy: ${diagMsg}`);
         if (diagMsg.startsWith('backend-ok:')) {
           const usedScheme = diagMsg.split(':')[1];
           callInfo._useWss = (usedScheme === 'wss');
@@ -448,13 +593,19 @@ callBtn.onclick = async () => {
       }
       if (typeof e.data === 'string' && e.data.startsWith('ERROR:')) {
         proxyFailed = true;
+        logSip(`Proxy Err: ${e.data}`);
         endCallUI('⚠️ ' + proxyErrorText(e.data.slice(6)));
         return;
       }
       onSipMessage(e.data);
     };
     ws.onerror = () => setStatus('خطأ في الاتصال بالسيرفر');
-    ws.onclose = e => { if (!uiEnded && !proxyFailed && !registered && !inviteSent) setStatus('انقطع الاتصال (code ' + e.code + ')'); };
+    ws.onclose = e => {
+      logSip(`WS Closed: code=${e.code}`);
+      if (!uiEnded && !proxyFailed) {
+        endCallUI('انقطع الاتصال بالسيرفر (code ' + e.code + ')');
+      }
+    };
     hangBtn.style.display = '';
     hangBtn.onclick = () => { sendBye(); endCallUI('أنهيت المكالمة'); };
   } catch (e) {
