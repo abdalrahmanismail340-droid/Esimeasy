@@ -68,6 +68,14 @@ def ws_echo(ws):
 def ws_proxy(ws):
     """Relay browser wss:// <-> eSIMEasy ws:// (browser blocks plain ws from HTTPS)."""
     stop = threading.Event()
+    DIAG = True  # temporary: step-by-step diagnostics
+
+    def diag(msg):
+        if DIAG:
+            try:
+                ws.send("ERROR:diag:" + msg)
+            except Exception:
+                pass
 
     def send_error_and_close(reason):
         """Tell the browser exactly which leg failed before closing."""
@@ -80,21 +88,36 @@ def ws_proxy(ws):
         except Exception:
             pass
 
-    if "user" not in session:
-        send_error_and_close("no-login-session")
-        return
-    target_host = request.args.get("host", "")
-    target_port = request.args.get("port", "")
-    if not target_host or not target_port:
-        send_error_and_close("missing-host-port")
-        return
-    target_url = f"ws://{target_host}:{target_port}/ws"
     try:
-        backend = ws_client.create_connection(
-            target_url, subprotocols=["sip"], timeout=10)
-        backend.settimeout(None)  # blocking recv after connect
+        diag("start")
+        if "user" not in session:
+            send_error_and_close("no-login-session")
+            return
+        diag("session-ok")
+        target_host = request.args.get("host", "")
+        target_port = request.args.get("port", "")
+        if not target_host or not target_port:
+            send_error_and_close("missing-host-port")
+            return
+        diag(f"target:{target_host}:{target_port}")
+        target_url = f"ws://{target_host}:{target_port}/ws"
+        try:
+            backend = ws_client.create_connection(
+                target_url, subprotocols=["sip"], timeout=10)
+            backend.settimeout(None)  # blocking recv after connect
+        except Exception as e:
+            send_error_and_close(f"backend-connect-failed:{type(e).__name__}:{str(e)[:80]}")
+            return
+        diag("backend-ok")
     except Exception as e:
-        send_error_and_close(f"backend-connect-failed:{type(e).__name__}")
+        try:
+            ws.send(f"ERROR:proxy-crashed:{type(e).__name__}:{str(e)[:80]}")
+        except Exception:
+            pass
+        try:
+            ws.close()
+        except Exception:
+            pass
         return
 
     def backend_to_browser():
