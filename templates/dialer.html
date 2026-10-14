@@ -359,7 +359,9 @@ function sendInvite(sdp, authHeader, authHeaderName = 'Authorization') {
   const headers = { 'to': `"${dialUser}"<${scheme}:${dialUser}@${callInfo.webrtcAddr}>` };
   if (authHeader) headers[authHeaderName] = authHeader;
   logSip(`-> INVITE ${dialUser}`);
-  ws.send(sipMsg('INVITE', uri, headers, sdp));
+  const fullInvite = sipMsg('INVITE', uri, headers, sdp);
+  logSip(`<!> FULL INVITE sent:\n` + fullInvite.slice(0, 2500).replace(/Authorization: .*/, 'Authorization: <hidden>').replace(/Proxy-Authorization: .*/, 'Proxy-Authorization: <hidden>'));
+  ws.send(fullInvite);
   inviteSent = true;
 }
 
@@ -440,6 +442,7 @@ async function onSipMessage(data) {
     setStatus('جاري فتح الخط (100 Trying)...');
   } else if (start.startsWith('SIP/2.0 180') || start.startsWith('SIP/2.0 183')) {
     setStatus('بيرن... 📲');
+    logSip(`<!> FULL ${start.split(' ')[1]} response:\n` + data.slice(0, 2500));
     const toH = headers['to'] || '';
     const m = toH.match(/tag=([^\s;,]+)/);
     if (m) toTag = m[1];
