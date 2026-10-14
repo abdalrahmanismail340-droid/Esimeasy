@@ -184,8 +184,10 @@ function buildAuthHeader(challenge, method, uri) {
   const realm = p.realm || '', nonce = p.nonce || '';
   const qop = p.qop ? p.qop.split(',')[0].trim() : '';
   const nc = '00000001', cnonce = rand(8);
-  const resp = digestResponse(callInfo.webrtcId, callInfo.webrtcPwd, realm, nonce, method, uri, qop, nc, cnonce);
-  let h = `Digest username="${callInfo.webrtcId}", realm="${realm}", nonce="${nonce}", uri="${uri}", response="${resp}", algorithm=MD5`;
+  // زي التطبيق الأصلي بالظبط (mx3.smali): الـ digest URI دايماً "sips:<host>" حتى مع WS العادي
+  const digestUri = 'sips:' + callInfo.webrtcAddr;
+  const resp = digestResponse(callInfo.webrtcId, callInfo.webrtcPwd, realm, nonce, method, digestUri, qop, nc, cnonce);
+  let h = `Digest username="${callInfo.webrtcId}", realm="${realm}", nonce="${nonce}", uri="${digestUri}", response="${resp}", algorithm=MD5`;
   if (qop) h += `, qop=${qop}, nc=${nc}, cnonce="${cnonce}"`;
   return h;
 }
