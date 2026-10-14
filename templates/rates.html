@@ -32,8 +32,8 @@
   <a class="back" href="/">← رجوع</a>
   <h1>💰 أسعار المكالمات</h1>
   <form method="post">
-    <label>رصيدك من العملات</label>
-    <input type="number" name="balance" value="{{ balance }}" min="0">
+    <label>رصيدك من العملات {% if balance_auto %}(تلقائي من حسابك ✅){% else %}(يدوي){% endif %}</label>
+    <input type="number" name="balance" placeholder="{{ balance }}" min="0">
     <label>كود الدولة أو اسمها أو أول الرقم (مثال: 20 أو 201012345678)</label>
     <input type="text" name="code" placeholder="201012345678" value="{{ result.query if result else '' }}">
     <button type="submit">اعرف السعر</button>

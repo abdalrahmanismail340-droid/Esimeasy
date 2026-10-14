@@ -1,9 +1,13 @@
 import os
+import uuid
 from datetime import timedelta
 from flask import Flask, redirect, url_for, session, render_template, request
 from authlib.integrations.flask_client import OAuth
 from werkzeug.middleware.proxy_fix import ProxyFix
+import requests
 from rates import RATES
+
+ESIMEASY_LOGIN_URL = "https://esimapi.esimeasy.co.kr:8444/esimeasyasd/v4/user/login"
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
@@ -28,7 +32,8 @@ google = oauth.register(
 def index():
     user = session.get("user")
     if user:
-        return render_template("dashboard.html", user=user)
+        return render_template("dashboard.html", user=user,
+                               esim=session.get("esimeasy"))
     return render_template("login.html")
 
 
@@ -44,17 +49,68 @@ def callback():
     userinfo = token.get("userinfo")
     if userinfo:
         session.permanent = True
+        google_id = userinfo.get("sub", "")
         session["user"] = {
             "name": userinfo.get("name"),
             "email": userinfo.get("email"),
             "picture": userinfo.get("picture"),
+            "google_id": google_id,
         }
+        # Auto-login to eSIMEasy with the verified Google user ID,
+        # same as the official app does (userId + authenType UAT0002).
+        if google_id:
+            session["esimeasy"] = esimeasy_login(google_id)
     return redirect(url_for("index"))
+
+
+def esimeasy_login(google_user_id):
+    """Log into eSIMEasy's backend using the Google user ID.
+
+    Returns dict with sessionId / remainCallPoint on success, else {}.
+    """
+    device_id = session.get("device_id")
+    if not device_id:
+        device_id = str(uuid.uuid4())
+        session["device_id"] = device_id
+    payload = {
+        "userId": google_user_id,
+        "paramUserId": google_user_id,
+        "authenType": "UAT0002",
+        "paramAuthenType": "UAT0002",
+        "deviceOs": "AT0001",
+        "deviceId": device_id,
+        "deviceModel": "Web",
+        "deviceOsVersion": "",
+        "deviceOsLanguage": "en",
+        "pushToken": "",
+        "installRootId": "",
+        "isTest": False,
+        "appVersion": "3.0.0",
+        "languageCd": "en",
+    }
+    try:
+        r = requests.post(ESIMEASY_LOGIN_URL, json=payload, timeout=15)
+        data = r.json()
+    except Exception:
+        return {}
+    if not isinstance(data, dict) or not data.get("sessionId"):
+        return {}
+    try:
+        balance = float(data.get("remainCallPoint") or 0)
+    except (TypeError, ValueError):
+        balance = 0
+    return {
+        "sessionId": data.get("sessionId"),
+        "remainCallPoint": balance,
+        "memberId": data.get("memberId", ""),
+        "email": data.get("email", ""),
+    }
 
 
 @app.route("/logout")
 def logout():
     session.pop("user", None)
+    session.pop("esimeasy", None)
     return redirect(url_for("index"))
 
 
@@ -67,15 +123,22 @@ def health():
 def rates():
     if "user" not in session:
         return redirect(url_for("index"))
-    balance = session.get("balance", 10000)
+    esim = session.get("esimeasy") or {}
+    auto_balance = esim.get("remainCallPoint")
+    # Auto balance from eSIMEasy account when available, else manual (remembered).
+    balance = auto_balance if auto_balance else session.get("balance", 10000)
+    balance_auto = bool(auto_balance)
     result = None
     if request.method == "POST":
         raw = request.form.get("code", "").strip()
         query = raw.lower().lstrip("+").replace(" ", "").replace("-", "")
-        try:
-            balance = int(request.form.get("balance", balance))
-        except (ValueError, TypeError):
-            pass
+        manual = request.form.get("balance", "").strip()
+        if manual:
+            try:
+                balance = int(manual)
+                balance_auto = False
+            except (ValueError, TypeError):
+                pass
         session["balance"] = balance
         matches = []
         detected_from_number = None
@@ -97,8 +160,10 @@ def rates():
                                         "rate": rate, "minutes": minutes})
                     break
         result = {"query": raw, "balance": balance, "matches": matches,
-                  "detected_from_number": detected_from_number}
-    return render_template("rates.html", result=result, balance=balance)
+                  "detected_from_number": detected_from_number,
+                  "balance_auto": balance_auto}
+    return render_template("rates.html", result=result, balance=balance,
+                           balance_auto=balance_auto)
 
 
 if __name__ == "__main__":

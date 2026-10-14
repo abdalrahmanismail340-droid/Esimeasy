@@ -22,6 +22,11 @@
     <h1>أهلاً {{ user.name }} 👋</h1>
     <div class="email">{{ user.email }}</div>
     <div class="box">تم تسجيل الدخول بنجاح.<br>هنا هتتبني صفحة الـ Dialer بعد كده.</div>
+    {% if esim and esim.sessionId %}
+    <div class="box" style="color:#81c784;">✅ متصل بحساب eSIMEasy<br>الرصيد: <b>{{ esim.remainCallPoint }}</b> عملة (تلقائي)</div>
+    {% else %}
+    <div class="box" style="color:#ffb74d;">⚠️ مش متصل بحساب eSIMEasy<br>الرصيد هتدخله يدوي في صفحة الأسعار</div>
+    {% endif %}
     <a class="out" href="/rates" style="color:#81c784;border-color:#81c78455;margin-bottom:12px;display:inline-block;">💰 أسعار المكالمات</a><br>
     <a class="out" href="/logout">تسجيل الخروج</a>
   </div>
