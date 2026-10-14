@@ -54,32 +54,42 @@ sock = Sock(app)
 @sock.route("/ws-proxy")
 def ws_proxy(ws):
     """Relay browser wss:// <-> eSIMEasy ws:// (browser blocks plain ws from HTTPS)."""
+    stop = threading.Event()
+
+    def send_error_and_close(reason):
+        """Tell the browser exactly which leg failed before closing."""
+        try:
+            ws.send("ERROR:" + reason)
+        except Exception:
+            pass
+        try:
+            ws.close()
+        except Exception:
+            pass
+
     if "user" not in session:
-        ws.close()
+        send_error_and_close("no-login-session")
         return
     target_host = request.args.get("host", "")
     target_port = request.args.get("port", "")
     if not target_host or not target_port:
-        ws.close()
+        send_error_and_close("missing-host-port")
         return
     target_url = f"ws://{target_host}:{target_port}/ws"
     try:
         backend = ws_client.create_connection(
             target_url, subprotocols=["sip"], timeout=10)
-    except Exception:
-        try:
-            ws.close()
-        except Exception:
-            pass
+    except Exception as e:
+        send_error_and_close(f"backend-connect-failed:{type(e).__name__}")
         return
-
-    stop = threading.Event()
 
     def backend_to_browser():
         try:
             while not stop.is_set():
                 try:
                     msg = backend.recv()
+                except ws_client.WebSocketTimeoutException:
+                    continue  # backend idle (normal mid-call); keep relaying
                 except Exception:
                     break
                 if msg is None:
@@ -100,6 +110,13 @@ def ws_proxy(ws):
             except Exception:
                 break
             if msg is None:
+                # None = either idle timeout (still connected) or closed.
+                try:
+                    alive = ws.connected
+                except Exception:
+                    alive = False
+                if alive:
+                    continue  # browser idle mid-call; keep relaying
                 break
             try:
                 backend.send(msg)
