@@ -377,7 +377,11 @@ callBtn.onclick = async () => {
     // Browser blocks ws:// from HTTPS pages, so we never connect directly.
     const wsUrl = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws-proxy?host=${encodeURIComponent(info.webrtcAddr)}&port=${encodeURIComponent(info.webrtcPort)}`;
     setStatus('جاري الاتصال بالسيرفر...');
-    ws = new WebSocket(wsUrl, 'sip');
+    // NOTE: no 'sip' subprotocol here on purpose — the browser<->proxy hop is a
+    // plain relay; requesting a subprotocol the server doesn't select back has
+    // been observed to kill the handshake through the hosting edge (1006).
+    // The proxy->eSIMEasy leg still negotiates 'sip' on its own socket.
+    ws = new WebSocket(wsUrl);
     ws.onopen = () => sendRegister(null);
     ws.onmessage = e => {
       // Proxy diagnostics arrive as plain "ERROR:<reason>" text frames.
