@@ -39,10 +39,27 @@
   <div class="status" id="status"></div>
   <div class="timer" id="timer"></div>
   <a class="back" href="/">← رجوع</a>
+  <div style="margin-top:10px;font-size:11px;color:#666;">
+    <a href="#" id="wsTest" style="color:#666;">اختبار الاتصال</a> <span id="wsTestResult"></span>
+  </div>
 </div>
 <audio id="remoteAudio" autoplay></audio>
 
 <script>
+// ---------- WebSocket self-test ----------
+document.getElementById('wsTest').onclick = async (e) => {
+  e.preventDefault();
+  const out = document.getElementById('wsTestResult');
+  out.textContent = '...';
+  try {
+    const t = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws-echo`);
+    t.onopen = () => t.send('ping');
+    t.onmessage = (ev) => { out.textContent = ev.data === 'echo:ping' ? '✅ شغال' : '❌ ' + ev.data; t.close(); };
+    t.onerror = () => { out.textContent = '❌ خطأ'; };
+    t.onclose = (ev) => { if (out.textContent === '...') out.textContent = '❌ قفل (' + ev.code + ')'; };
+    setTimeout(() => { if (out.textContent === '...') { out.textContent = '❌ مهلة'; try{t.close();}catch(_){}} }, 8000);
+  } catch (err) { out.textContent = '❌ ' + err.message; }
+};
 // ---------- keypad ----------
 const pad = document.getElementById('pad');
 const numInput = document.getElementById('numInput');

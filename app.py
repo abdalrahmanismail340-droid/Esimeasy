@@ -51,6 +51,19 @@ google = oauth.register(
 sock = Sock(app)
 
 
+@sock.route("/ws-echo")
+def ws_echo(ws):
+    """Simple echo to test if WebSockets work at all on this deploy."""
+    try:
+        while True:
+            msg = ws.receive()
+            if msg is None:
+                break
+            ws.send("echo:" + str(msg))
+    except Exception:
+        pass
+
+
 @sock.route("/ws-proxy")
 def ws_proxy(ws):
     """Relay browser wss:// <-> eSIMEasy ws:// (browser blocks plain ws from HTTPS)."""
