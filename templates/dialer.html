@@ -316,7 +316,8 @@ function sipMsg(method, uri, extraHeaders, body, customBranch) {
 
   let msg = `${method} ${uri} SIP/2.0\r\n`;
   msg += `Via: SIP/2.0/${transportUpper} df7jal23ls0d.invalid;branch=${branch};rport\r\n`;
-  msg += `From: "${callInfo.uniqueId}"<${scheme}:${callInfo.webrtcId}@${callInfo.webrtcAddr}>;tag=${activeFromTag}\r\n`;
+  // From display name = sessionId بتاع اللوجين (اتأكد من reverse الـ APK)، مش uniqueId
+  msg += `From: "${callInfo.sipIdentity || callInfo.uniqueId}"<${scheme}:${callInfo.webrtcId}@${callInfo.webrtcAddr}>;tag=${activeFromTag}\r\n`;
   msg += `To: ${extraHeaders.to || defaultTo}\r\n`;
   msg += `Call-ID: ${activeCallId}\r\n`;
   msg += `CSeq: ${seqNum} ${method}\r\n`;
@@ -596,6 +597,7 @@ callBtn.onclick = async () => {
     callInfo = info;
     logSip(`Setup OK: ${info.webrtcAddr}:${info.webrtcPort}`);
     if (info.rawFields) logSip(`call/req raw fields: ${info.rawFields.join(', ')}`);
+    if (info.sipIdentity) logSip(`Using sessionId as SIP From identity: ${info.sipIdentity.slice(0,12)}...`);
 
     regCallId = rand(16) + '@esimeasy';
     regFromTag = rand(8);

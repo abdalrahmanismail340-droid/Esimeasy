@@ -402,6 +402,7 @@ def api_call_setup():
     print(f"[call/req FULL RESPONSE] {data}", flush=True)
     print(f"[call/req FULL PAYLOAD SENT] {payload}", flush=True)
     print(f"[call/req] country_code={country_code} -> ISO3 uniqueId={unique_id}", flush=True)
+    print(f"[call/req] sipIdentity (sessionId used as SIP From)={session_id}", flush=True)
 
     return {
         "callSequence": data.get("callSequence"),
@@ -419,6 +420,11 @@ def api_call_setup():
         "codecSpec": data.get("codecSpec"),
         "dialString": country_code + dial_number,
         "uniqueId": unique_id,
+        # الاكتشاف الأهم: الـ From display name في SIP INVITE الحقيقي مش uniqueId
+        # ولا ISO3 — هو sessionId بتاع تسجيل الدخول نفسه (اتأكد من smali:
+        # Lbn4;->n بيتحط من ResultLogin.getSessionId()/ResultUserJoin.getSessionId()
+        # في wn1.smali و g64.smali). ده اللي لازم يتبعت في الـ From، مش uniqueId.
+        "sipIdentity": session_id,
         # كل الحقول الراجعة من السيرفر من غير فلترة — عشان نشوف أي حاجة ناقصة
         # في الريسبونس من غير ما نفتح Railway logs كل مرة.
         "rawFields": list(data.keys()),
