@@ -28,6 +28,9 @@
     <div class="box" style="color:#ffb74d;">⚠️ مش متصل بحساب eSIMEasy<br>الرصيد هتدخله يدوي في صفحة الأسعار{% if esim and esim._error %}<br><span style="font-size:12px;direction:ltr;">debug: {{ esim._error }}</span>{% endif %}</div>
     {% endif %}
     <a class="out" href="/rates" style="color:#81c784;border-color:#81c78455;margin-bottom:12px;display:inline-block;">💰 أسعار المكالمات</a><br>
+    {% if esim and esim.sessionId %}
+    <a class="out" href="/dialer" style="color:#4fc3f7;border-color:#4fc3f755;margin-bottom:12px;display:inline-block;">📞 الدايلر — مكالمة حقيقية</a><br>
+    {% endif %}
     <a class="out" href="/logout">تسجيل الخروج</a>
   </div>
 </body>

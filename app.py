@@ -11,6 +11,7 @@ import requests
 from rates import RATES
 
 ESIMEASY_LOGIN_URL = "https://esimapi.esimeasy.co.kr:8444/esimeasyasd/v4/user/login"
+ESIMEASY_CALL_REQ_URL = "https://esimapi.esimeasy.co.kr:8444/baycscsd/outbound/dtls/call/req"
 # AES key/IV the official app uses to encrypt the userId before login
 # (ww.u0 in the decompiled APK: AES/CBC/PKCS5Padding)
 ESIMEASY_AES_KEY = b"Ykuf2gLd95W?Zfsd"
@@ -165,6 +166,89 @@ def esimeasy_login(google_user_id, email=""):
         "_retCode": ret_code,
         "_raw": str(last_data)[:250],
     }
+
+
+@app.route("/dialer")
+def dialer():
+    if "user" not in session:
+        return redirect(url_for("index"))
+    esim = session.get("esimeasy") or {}
+    if not esim.get("sessionId"):
+        return redirect(url_for("index"))
+    return render_template("dialer.html", user=session["user"],
+                           balance=esim.get("remainCallPoint", 0))
+
+
+@app.route("/api/call/setup", methods=["POST"])
+def api_call_setup():
+    """Call eSIMEasy call/req and return WebRTC/SIP credentials for the browser dialer."""
+    if "user" not in session:
+        return {"error": "not logged in"}, 401
+    esim = session.get("esimeasy") or {}
+    session_id = esim.get("sessionId")
+    if not session_id:
+        return {"error": "eSIMEasy not connected"}, 400
+    body = request.get_json(force=True, silent=True) or {}
+    number = "".join(c for c in str(body.get("number", "")) if c.isdigit())
+    country_code = "".join(c for c in str(body.get("country_code", "")) if c.isdigit())
+    if not number:
+        return {"error": "missing number"}, 400
+    # dialString = countryNum + number with leading 0 stripped (like the app)
+    dial_number = number.lstrip("0")
+    unique_id = uuid.uuid4().hex
+    payload = {
+        "sessionId": session_id,
+        "paramUniqueId": unique_id,
+        "nationalUniqueId": unique_id,
+        "paramNationalId": country_code,
+        "nationalId": country_code,
+        "paramPhoneId": dial_number,
+        "phoneId": dial_number,
+        "networkTp": "NT0001",
+        "appCd": "ACT0060",
+        "appVersion": "3.0.0",
+        "languageCd": "en",
+    }
+    try:
+        r = requests.post(ESIMEASY_CALL_REQ_URL, json=payload,
+                          headers={"User-Agent": "okhttp/4.9.3"}, timeout=20)
+        data = r.json()
+    except Exception as e:
+        return {"error": f"call setup failed: {e}"}, 502
+    if not isinstance(data, dict) or not data.get("webrtcId"):
+        return {"error": "call setup rejected",
+                "retCode": data.get("retCode") if isinstance(data, dict) else None,
+                "raw": str(data)[:300]}, 502
+    # Pass through only what the browser dialer needs
+    return {
+        "callSequence": data.get("callSequence"),
+        "webrtcAddr": data.get("webrtcAddr"),
+        "webrtcPort": data.get("webrtcPort"),
+        "webrtcId": data.get("webrtcId"),
+        "webrtcPwd": data.get("webrtcPwd"),
+        "stunAddr": data.get("stunAddr"),
+        "turnAddr": data.get("turnAddr") or data.get("turnAddrIpV4"),
+        "turnId": data.get("turnId"),
+        "turnPwd": data.get("turnPwd"),
+        "isDtls": data.get("isDtls"),
+        "isTls": data.get("isTls"),
+        "isTurn": data.get("isTurn"),
+        "codecSpec": data.get("codecSpec"),
+        "dialString": country_code + dial_number,
+        "uniqueId": unique_id,
+    }
+
+
+@app.route("/api/prefix/<code>")
+def api_prefix(code):
+    """Return country name + mobile rate for a dial code (used by the dialer)."""
+    if "user" not in session:
+        return {"error": "not logged in"}, 401
+    entries = RATES.get(code)
+    if not entries:
+        return {"error": "unknown"}, 404
+    name, rate = entries[0]
+    return {"code": code, "name": name, "rate": rate}
 
 
 @app.route("/logout")

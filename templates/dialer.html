@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>الدايلر — مكالمة حقيقية</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Tahoma, sans-serif; background: linear-gradient(135deg, #1a1a2e, #16213e); min-height: 100vh; display: flex; align-items: center; justify-content: center; color: #fff; }
+  .card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 20px; padding: 32px; text-align: center; max-width: 420px; width: 92%; }
+  h1 { font-size: 20px; margin-bottom: 6px; }
+  .balance { color: #81c784; font-size: 14px; margin-bottom: 20px; }
+  .display { background: rgba(0,0,0,0.35); border-radius: 12px; padding: 16px; font-size: 26px; letter-spacing: 2px; min-height: 66px; margin-bottom: 8px; direction: ltr; overflow-x: auto; white-space: nowrap; }
+  .country { font-size: 14px; color: #4fc3f7; margin-bottom: 14px; min-height: 20px; }
+  .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+  .pad button { font-size: 22px; padding: 14px 0; border-radius: 50%; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.06); color: #fff; cursor: pointer; aspect-ratio: 1; max-width: 76px; margin: 0 auto; width: 100%; }
+  .pad button:active { background: rgba(255,255,255,0.2); }
+  .pad button small { display: block; font-size: 10px; color: #888; }
+  .actions { display: flex; gap: 12px; justify-content: center; margin-bottom: 12px; }
+  .call-btn { width: 72px; height: 72px; border-radius: 50%; border: none; font-size: 30px; cursor: pointer; background: #2e7d32; color: #fff; }
+  .hang-btn { width: 72px; height: 72px; border-radius: 50%; border: none; font-size: 30px; cursor: pointer; background: #c62828; color: #fff; display: none; }
+  .status { font-size: 14px; color: #aaa; min-height: 22px; margin-bottom: 8px; }
+  .timer { font-size: 15px; color: #81c784; min-height: 22px; direction: ltr; }
+  .back { display: inline-block; margin-top: 14px; color: #888; text-decoration: none; font-size: 13px; }
+  input.num { width: 100%; background: transparent; border: none; color: #fff; font-size: 26px; text-align: center; letter-spacing: 2px; outline: none; direction: ltr; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>📞 الدايلر</h1>
+  <div class="balance">الرصيد: <b id="balance">{{ balance }}</b> عملة</div>
+  <div class="display"><input class="num" id="numInput" placeholder="رقم الهاتف" inputmode="tel"></div>
+  <div class="country" id="countryInfo"></div>
+  <div class="pad" id="pad"></div>
+  <div class="actions">
+    <button class="call-btn" id="callBtn" title="اتصال">📞</button>
+    <button class="hang-btn" id="hangBtn" title="إنهاء">📵</button>
+  </div>
+  <div class="status" id="status"></div>
+  <div class="timer" id="timer"></div>
+  <a class="back" href="/">← رجوع</a>
+</div>
+<audio id="remoteAudio" autoplay></audio>
+
+<script>
+// ---------- keypad ----------
+const pad = document.getElementById('pad');
+const numInput = document.getElementById('numInput');
+const keys = [['1',''],['2','ABC'],['3','DEF'],['4','GHI'],['5','JKL'],['6','MNO'],['7','PQRS'],['8','TUV'],['9','WXYZ'],['*',''],['0','+'],['#','']];
+keys.forEach(([d, s]) => {
+  const b = document.createElement('button');
+  b.innerHTML = d + (s ? `<small>${s}</small>` : '');
+  b.onclick = () => { numInput.value += d; detectCountry(); };
+  pad.appendChild(b);
+});
+numInput.addEventListener('input', detectCountry);
+numInput.addEventListener('keydown', e => { if (e.key === 'Backspace') setTimeout(detectCountry, 0); });
+
+let detectedPrefix = '';
+async function detectCountry() {
+  const v = numInput.value.replace(/\D/g, '');
+  detectedPrefix = '';
+  document.getElementById('countryInfo').textContent = '';
+  if (!v) return;
+  // longest dial-code prefix match (1-6 digits)
+  for (let len = Math.min(v.length, 6); len >= 1; len--) {
+    const p = v.substring(0, len);
+    try {
+      const r = await fetch('/api/prefix/' + p);
+      if (r.ok) {
+        const info = await r.json();
+        detectedPrefix = p;
+        document.getElementById('countryInfo').textContent =
+          `${info.name} (+${p}) — ${info.rate} عملة/دقيقة`;
+        return;
+      }
+    } catch (e) {}
+  }
+}
+
+// ---------- MD5 (for SIP digest auth) ----------
+function md5(str) {
+  function rl(n, c) { return (n << c) | (n >>> (32 - c)); }
+  function add(x, y) { const l = (x & 0xffff) + (y & 0xffff); return ((x >> 16) + (y >> 16) + (l >> 16) << 16) | (l & 0xffff); }
+  function cm(q, a, b, x, s, t) { a = add(add(a, q), add(x, t)); return add(rl(a, s), b); }
+  function ff(a,b,c,d,x,s,t){return cm((b&c)|(~b&d),a,b,x,s,t);}
+  function gg(a,b,c,d,x,s,t){return cm((b&d)|(c&~d),a,b,x,s,t);}
+  function hh(a,b,c,d,x,s,t){return cm(b^c^d,a,b,x,s,t);}
+  function ii(a,b,c,d,x,s,t){return cm(c^(b|~d),a,b,x,s,t);}
+  const bytes = new TextEncoder().encode(str);
+  const bitLen = bytes.length * 8;
+  let padded = Array.from(bytes);
+  padded.push(0x80);
+  while (padded.length % 64 !== 56) padded.push(0);
+  for (let i = 0; i < 8; i++) padded.push((bitLen / Math.pow(2, 8*i)) & 0xff);
+  const w = new Array(16);
+  let a=0x67452301, b=0xefcdab89, c=0x98badcfe, d=0x10325476;
+  for (let i = 0; i < padded.length; i += 64) {
+    for (let j = 0; j < 16; j++) w[j] = padded[i+4*j] | (padded[i+4*j+1]<<8) | (padded[i+4*j+2]<<16) | (padded[i+4*j+3]<<24);
+    const A=a,B=b,C=c,D=d;
+    a=ff(a,b,c,d,w[0],7,0xd76aa478);d=ff(d,a,b,c,w[1],12,0xe8c7b756);c=ff(c,d,a,b,w[2],17,0x242070db);b=ff(b,c,d,a,w[3],22,0xc1bdceee);
+    a=ff(a,b,c,d,w[4],7,0xf57c0faf);d=ff(d,a,b,c,w[5],12,0x4787c62a);c=ff(c,d,a,b,w[6],17,0xa8304613);b=ff(b,c,d,a,w[7],22,0xfd469501);
+    a=ff(a,b,c,d,w[8],7,0x698098d8);d=ff(d,a,b,c,w[9],12,0x8b44f7af);c=ff(c,d,a,b,w[10],17,0xffff5bb1);b=ff(b,c,d,a,w[11],22,0x895cd7be);
+    a=ff(a,b,c,d,w[12],7,0x6b901122);d=ff(d,a,b,c,w[13],12,0xfd987193);c=ff(c,d,a,b,w[14],17,0xa679438e);b=ff(b,c,d,a,w[15],22,0x49b40821);
+    a=gg(a,b,c,d,w[1],5,0xf61e2562);d=gg(d,a,b,c,w[6],9,0xc040b340);c=gg(c,d,a,b,w[11],14,0x265e5a51);b=gg(b,c,d,a,w[0],20,0xe9b6c7aa);
+    a=gg(a,b,c,d,w[5],5,0xd62f105d);d=gg(d,a,b,c,w[10],9,0x2441453);c=gg(c,d,a,b,w[15],14,0xd8a1e681);b=gg(b,c,d,a,w[4],20,0xe7d3fbc8);
+    a=gg(a,b,c,d,w[9],5,0x21e1cde6);d=gg(d,a,b,c,w[14],9,0xc33707d6);c=gg(c,d,a,b,w[3],14,0xf4d50d87);b=gg(b,c,d,a,w[8],20,0x455a14ed);
+    a=gg(a,b,c,d,w[13],5,0xa9e3e905);d=gg(d,a,b,c,w[2],9,0xfcefa3f8);c=gg(c,d,a,b,w[7],14,0x676f02d9);b=gg(b,c,d,a,w[12],20,0x8d2a4c8a);
+    a=hh(a,b,c,d,w[5],4,0xfffa3942);d=hh(d,a,b,c,w[8],11,0x8771f681);c=hh(c,d,a,b,w[11],16,0x6d9d6122);b=hh(b,c,d,a,w[14],23,0xfde5380c);
+    a=hh(a,b,c,d,w[1],4,0xa4beea44);d=hh(d,a,b,c,w[4],11,0x4bdecfa9);c=hh(c,d,a,b,w[7],16,0xf6bb4b60);b=hh(b,c,d,a,w[10],23,0xbebfbc70);
+    a=hh(a,b,c,d,w[13],4,0x289b7ec6);d=hh(d,a,b,c,w[0],11,0xeaa127fa);c=hh(c,d,a,b,w[3],16,0xd4ef3085);b=hh(b,c,d,a,w[6],23,0x4881d05);
+    a=hh(a,b,c,d,w[9],4,0xd9d4d039);d=hh(d,a,b,c,w[12],11,0xe6db99e5);c=hh(c,d,a,b,w[15],16,0x1fa27cf8);b=hh(b,c,d,a,w[2],23,0xc4ac5665);
+    a=ii(a,b,c,d,w[0],6,0xf4292244);d=ii(d,a,b,c,w[7],10,0x432aff97);c=ii(c,d,a,b,w[14],15,0xab9423a7);b=ii(b,c,d,a,w[5],21,0xfc93a039);
+    a=ii(a,b,c,d,w[12],6,0x655b59c3);d=ii(d,a,b,c,w[3],10,0x8f0ccc92);c=ii(c,d,a,b,w[10],15,0xffeff47d);b=ii(b,c,d,a,w[1],21,0x85845dd1);
+    a=ii(a,b,c,d,w[8],6,0x6fa87e4f);d=ii(d,a,b,c,w[15],10,0xfe2ce6e0);c=ii(c,d,a,b,w[6],15,0xa3014314);b=ii(b,c,d,a,w[13],21,0x4e0811a1);
+    a=ii(a,b,c,d,w[4],6,0xf7537e82);d=ii(d,a,b,c,w[11],10,0xbd3af235);c=ii(c,d,a,b,w[2],15,0x2ad7d2bb);b=ii(b,c,d,a,w[9],21,0xeb86d391);
+    a=add(a,A);b=add(b,B);c=add(c,C);d=add(d,D);
+  }
+  const hex = n => ('00000000' + (n >>> 0).toString(16)).slice(-8).match(/../g).reverse().join('');
+  return hex(a) + hex(b) + hex(c) + hex(d);
+}
+
+// ---------- SIP + WebRTC dialer ----------
+const statusEl = document.getElementById('status');
+const timerEl = document.getElementById('timer');
+const callBtn = document.getElementById('callBtn');
+const hangBtn = document.getElementById('hangBtn');
+const remoteAudio = document.getElementById('remoteAudio');
+
+let ws = null, pc = null, callInfo = null;
+let cseq = 1, callId = '', fromTag = '', toTag = '';
+let registered = false, inviteSent = false;
+let timerInt = null, callStart = 0;
+let pendingSdp = null;
+
+function setStatus(t) { statusEl.textContent = t; }
+function rand(n) { const c='abcdef0123456789'; let s=''; for(let i=0;i<n;i++) s+=c[Math.floor(Math.random()*16)]; return s; }
+
+function parseWwwAuth(h) {
+  const out = {};
+  const re = /(\w+)=(?:"([^"]+)"|([^\s,]+))/g;
+  let m;
+  while ((m = re.exec(h))) out[m[1]] = m[2] || m[3];
+  return out;
+}
+
+function digestResponse(username, password, realm, nonce, method, uri, qop, nc, cnonce) {
+  const ha1 = md5(`${username}:${realm}:${password}`);
+  const ha2 = md5(`${method}:${uri}`);
+  if (qop) return md5(`${ha1}:${nonce}:${nc}:${cnonce}:${qop}:${ha2}`);
+  return md5(`${ha1}:${nonce}:${ha2}`);
+}
+
+function buildAuthHeader(challenge, method, uri) {
+  const p = parseWwwAuth(challenge);
+  const realm = p.realm || '', nonce = p.nonce || '';
+  const qop = p.qop ? p.qop.split(',')[0].trim() : '';
+  const nc = '00000001', cnonce = rand(8);
+  const resp = digestResponse(callInfo.webrtcId, callInfo.webrtcPwd, realm, nonce, method, uri, qop, nc, cnonce);
+  let h = `Digest username="${callInfo.webrtcId}", realm="${realm}", nonce="${nonce}", uri="${uri}", response="${resp}", algorithm=MD5`;
+  if (qop) h += `, qop=${qop}, nc=${nc}, cnonce="${cnonce}"`;
+  return h;
+}
+
+function sipMsg(method, uri, extraHeaders, body) {
+  const host = `${callInfo.webrtcAddr}:${callInfo.webrtcPort}`;
+  let msg = `${method} ${uri} SIP/2.0\r\n`;
+  msg += `Via: SIP/2.0/WS df7jal23ls0d.invalid;branch=z9hG4bK${rand(10)}\r\n`;
+  msg += `From: "${callInfo.uniqueId}" <sip:${callInfo.webrtcId}@${callInfo.webrtcAddr}>;tag=${fromTag}\r\n`;
+  msg += `To: ${extraHeaders.to || `<sip:${callInfo.dialString}@${callInfo.webrtcAddr}>`}\r\n`;
+  msg += `Call-ID: ${callId}\r\n`;
+  msg += `CSeq: ${cseq++} ${method}\r\n`;
+  msg += `Contact: <sip:${callInfo.webrtcId}@df7jal23ls0d.invalid;transport=ws>\r\n`;
+  msg += `Max-Forwards: 70\r\n`;
+  msg += `User-Agent: Softbay-Android\r\n`;
+  msg += `Organization: Softbay\r\n`;
+  for (const [k, v] of Object.entries(extraHeaders)) {
+    if (k === 'to') continue;
+    msg += `${k}: ${v}\r\n`;
+  }
+  if (body) {
+    msg += `Content-Type: application/sdp\r\n`;
+    msg += `Content-Length: ${new TextEncoder().encode(body).length}\r\n\r\n${body}`;
+  } else {
+    msg += `Content-Length: 0\r\n\r\n`;
+  }
+  return msg;
+}
+
+function sendRegister(authHeader) {
+  const tls = callInfo.isTls === 'Y';
+  const scheme = tls ? 'sips' : 'sip';
+  const transport = tls ? 'WSS' : 'WS';
+  const uri = `${scheme}:${callInfo.webrtcAddr};transport=${transport}`;
+  const headers = {};
+  if (authHeader) headers['Authorization'] = authHeader;
+  ws.send(sipMsg('REGISTER', uri, headers, null));
+}
+
+function sendInvite(sdp, authHeader) {
+  const tls = callInfo.isTls === 'Y';
+  const scheme = tls ? 'sips' : 'sip';
+  const transport = tls ? 'WSS' : 'WS';
+  const uri = `${scheme}:${callInfo.dialString}@${callInfo.webrtcAddr};transport=${transport}`;
+  const headers = {};
+  if (authHeader) headers['Authorization'] = authHeader;
+  ws.send(sipMsg('INVITE', uri, headers, sdp));
+  inviteSent = true;
+}
+
+function sendBye() {
+  if (!ws || ws.readyState !== 1) return;
+  const tls = callInfo.isTls === 'Y';
+  const scheme = tls ? 'sips' : 'sip';
+  const transport = tls ? 'WSS' : 'WS';
+  const uri = `${scheme}:${callInfo.dialString}@${callInfo.webrtcAddr};transport=${transport}`;
+  const headers = {};
+  if (toTag) headers['to'] = `<sip:${callInfo.dialString}@${callInfo.webrtcAddr}>;tag=${toTag}`;
+  ws.send(sipMsg('BYE', uri, headers, null));
+}
+
+function parseSip(data) {
+  const headEnd = data.indexOf('\r\n\r\n');
+  const head = data.substring(0, headEnd);
+  const body = headEnd >= 0 ? data.substring(headEnd + 4) : '';
+  const lines = head.split('\r\n');
+  const start = lines[0];
+  const headers = {};
+  for (let i = 1; i < lines.length; i++) {
+    const idx = lines[i].indexOf(':');
+    if (idx > 0) {
+      const k = lines[i].substring(0, idx).trim().toLowerCase();
+      const v = lines[i].substring(idx + 1).trim();
+      headers[k] = headers[k] ? headers[k] + ', ' + v : v;
+    }
+  }
+  return { start, headers, body };
+}
+
+async function onSipMessage(data) {
+  const { start, headers, body } = parseSip(data);
+  // console.log('SIP <-', start);
+  if (start.startsWith('SIP/2.0 401')) {
+    const wwwAuth = headers['www-authenticate'] || '';
+    const cseqH = headers['cseq'] || '';
+    const method = cseqH.split(' ').pop() || 'REGISTER';
+    const tls = callInfo.isTls === 'Y';
+    const scheme = tls ? 'sips' : 'sip';
+    const transport = tls ? 'WSS' : 'WS';
+    let uri;
+    if (method === 'REGISTER') uri = `${scheme}:${callInfo.webrtcAddr};transport=${transport}`;
+    else uri = `${scheme}:${callInfo.dialString}@${callInfo.webrtcAddr};transport=${transport}`;
+    const auth = buildAuthHeader(wwwAuth, method, uri);
+    if (method === 'REGISTER') { setStatus('تسجيل...'); sendRegister(auth); }
+    else if (pendingSdp) sendInvite(pendingSdp, auth);
+  } else if (start.startsWith('SIP/2.0 200')) {
+    const cseqH = headers['cseq'] || '';
+    if (cseqH.includes('REGISTER')) {
+      registered = true;
+      setStatus('جاري الاتصال...');
+      await startMedia();
+    } else if (cseqH.includes('INVITE')) {
+      setStatus('متصل ✅');
+      const toH = headers['to'] || '';
+      const m = toH.match(/tag=([^\s;,]+)/);
+      if (m) toTag = m[1];
+      if (body && pc) {
+        await pc.setRemoteDescription({ type: 'answer', sdp: body });
+      }
+      callStart = Date.now();
+      timerInt = setInterval(() => {
+        const s = Math.floor((Date.now() - callStart) / 1000);
+        timerEl.textContent = `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+      }, 1000);
+    } else if (cseqH.includes('BYE')) {
+      endCallUI('انتهت المكالمة');
+    }
+  } else if (start.startsWith('SIP/2.0 180') || start.startsWith('SIP/2.0 183')) {
+    setStatus('جرس... 📲');
+  } else if (start.match(/^SIP\/2\.0 [4-6]\d\d/)) {
+    endCallUI('فشل الاتصال (' + start.substring(8, 11) + ')');
+  } else if (start.startsWith('BYE')) {
+    endCallUI('الطرف الآخر أنهى المكالمة');
+  }
+}
+
+async function startMedia() {
+  const iceServers = [];
+  if (callInfo.stunAddr) iceServers.push({ urls: 'stun:' + callInfo.stunAddr });
+  if (callInfo.isTurn === 'Y' && callInfo.turnAddr) {
+    iceServers.push({ urls: 'turn:' + callInfo.turnAddr, username: callInfo.turnId, credential: callInfo.turnPwd });
+  }
+  pc = new RTCPeerConnection({ iceServers });
+  pc.ontrack = e => { remoteAudio.srcObject = e.streams[0]; };
+  pc.onicecandidate = e => { /* trickle via re-INVITE not implemented; candidates in initial offer */ };
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    stream.getTracks().forEach(t => pc.addTrack(t, stream));
+  } catch (e) {
+    setStatus('تعذر الوصول للميكروفون');
+    return;
+  }
+  // gather ICE then send INVITE with complete SDP (like the app's generateSipSdp)
+  await new Promise(res => {
+    if (pc.iceGatheringState === 'complete') return res();
+    pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === 'complete') res(); };
+    setTimeout(res, 4000);
+  });
+  const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
+  await pc.setLocalDescription(offer);
+  pendingSdp = pc.localDescription.sdp;
+  sendInvite(pendingSdp, null);
+}
+
+function endCallUI(msg) {
+  setStatus(msg || 'انتهت المكالمة');
+  clearInterval(timerInt);
+  callBtn.style.display = '';
+  hangBtn.style.display = 'none';
+  if (pc) { pc.close(); pc = null; }
+  if (ws && ws.readyState === 1) { try { ws.close(); } catch(e){} }
+  ws = null; registered = false; inviteSent = false; pendingSdp = null; toTag = '';
+}
+
+callBtn.onclick = async () => {
+  const raw = numInput.value.replace(/\D/g, '');
+  if (!raw) { setStatus('اكتب الرقم الأول'); return; }
+  if (!detectedPrefix) { setStatus('تعذر تحديد كود الدولة'); return; }
+  const number = raw.startsWith(detectedPrefix) ? raw.substring(detectedPrefix.length) : raw;
+  setStatus('تجهيز المكالمة...');
+  callBtn.style.display = 'none';
+  try {
+    const r = await fetch('/api/call/setup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ number, country_code: detectedPrefix })
+    });
+    const info = await r.json();
+    if (info.error) { setStatus('خطأ: ' + info.error); callBtn.style.display = ''; return; }
+    callInfo = info;
+    callId = rand(16) + '@esimeasy';
+    fromTag = rand(8);
+    cseq = 1;
+    const tls = info.isTls === 'Y';
+    const wsUrl = `${tls ? 'wss' : 'ws'}://${info.webrtcAddr}:${info.webrtcPort}/ws`;
+    setStatus('جاري الاتصال بالسيرفر...');
+    ws = new WebSocket(wsUrl, 'sip');
+    ws.onopen = () => sendRegister(null);
+    ws.onmessage = e => onSipMessage(e.data);
+    ws.onerror = () => setStatus('خطأ في الاتصال بالسيرفر');
+    ws.onclose = () => { if (!registered && !inviteSent) setStatus('انقطع الاتصال'); };
+    hangBtn.style.display = '';
+    hangBtn.onclick = () => { sendBye(); endCallUI('أنهيت المكالمة'); };
+  } catch (e) {
+    setStatus('خطأ: ' + e.message);
+    callBtn.style.display = '';
+  }
+};
+</script>
+</body>
+</html>
