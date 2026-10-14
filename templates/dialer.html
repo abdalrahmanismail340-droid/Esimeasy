@@ -19,7 +19,7 @@
   .actions { display: flex; gap: 12px; justify-content: center; margin-bottom: 12px; }
   .call-btn { width: 72px; height: 72px; border-radius: 50%; border: none; font-size: 30px; cursor: pointer; background: #2e7d32; color: #fff; }
   .hang-btn { width: 72px; height: 72px; border-radius: 50%; border: none; font-size: 30px; cursor: pointer; background: #c62828; color: #fff; display: none; }
-  .status { font-size: 14px; color: #aaa; min-height: 22px; margin-bottom: 8px; }
+  .status { font-size: 14px; color: #aaa; min-height: 22px; margin-bottom: 8px; word-break: break-word; }
   .timer { font-size: 15px; color: #81c784; min-height: 22px; direction: ltr; }
   .back { display: inline-block; margin-top: 14px; color: #888; text-decoration: none; font-size: 13px; }
   input.num { width: 100%; background: transparent; border: none; color: #fff; font-size: 26px; text-align: center; letter-spacing: 2px; outline: none; direction: ltr; }
@@ -237,6 +237,17 @@ function sendInvite(sdp, authHeader) {
   inviteSent = true;
 }
 
+function sendAck() {
+  if (!ws || ws.readyState !== 1) return;
+  const tls = !!callInfo._useWss;
+  const scheme = tls ? 'sips' : 'sip';
+  const transport = tls ? 'WSS' : 'WS';
+  const uri = `${scheme}:${callInfo.dialString}@${callInfo.webrtcAddr};transport=${transport}`;
+  const headers = {};
+  if (toTag) headers['to'] = `<sip:${callInfo.dialString}@${callInfo.webrtcAddr}>;tag=${toTag}`;
+  ws.send(sipMsg('ACK', uri, headers, null));
+}
+
 function sendBye() {
   if (!ws || ws.readyState !== 1) return;
   const tls = !!callInfo._useWss;
@@ -250,10 +261,10 @@ function sendBye() {
 
 function parseSip(data) {
   const headEnd = data.indexOf('\r\n\r\n');
-  const head = data.substring(0, headEnd);
+  const head = headEnd >= 0 ? data.substring(0, headEnd) : data;
   const body = headEnd >= 0 ? data.substring(headEnd + 4) : '';
   const lines = head.split('\r\n');
-  const start = lines[0];
+  const start = lines[0] || '';
   const headers = {};
   for (let i = 1; i < lines.length; i++) {
     const idx = lines[i].indexOf(':');
@@ -268,9 +279,9 @@ function parseSip(data) {
 
 async function onSipMessage(data) {
   const { start, headers, body } = parseSip(data);
-  // console.log('SIP <-', start);
-  if (start.startsWith('SIP/2.0 401')) {
-    const wwwAuth = headers['www-authenticate'] || '';
+  if (start.startsWith('SIP/2.0 401') || start.startsWith('SIP/2.0 407')) {
+    const wwwAuth = headers['www-authenticate'] || headers['proxy-authenticate'] || '';
+    const authHeaderName = start.startsWith('SIP/2.0 407') ? 'Proxy-Authorization' : 'Authorization';
     const cseqH = headers['cseq'] || '';
     const method = cseqH.split(' ').pop() || 'REGISTER';
     const tls = !!callInfo._useWss;
@@ -280,8 +291,14 @@ async function onSipMessage(data) {
     if (method === 'REGISTER') uri = `${scheme}:${callInfo.webrtcAddr};transport=${transport}`;
     else uri = `${scheme}:${callInfo.dialString}@${callInfo.webrtcAddr};transport=${transport}`;
     const auth = buildAuthHeader(wwwAuth, method, uri);
-    if (method === 'REGISTER') { setStatus('تسجيل...'); sendRegister(auth); }
-    else if (pendingSdp) sendInvite(pendingSdp, auth);
+    if (method === 'REGISTER') {
+      setStatus('تسجيل الدخول بالسيرفر...');
+      sendRegister(auth);
+    } else if (pendingSdp) {
+      const extra = {};
+      extra[authHeaderName] = auth;
+      ws.send(sipMsg('INVITE', uri, extra, pendingSdp));
+    }
   } else if (start.startsWith('SIP/2.0 200')) {
     const cseqH = headers['cseq'] || '';
     if (cseqH.includes('REGISTER')) {
@@ -293,6 +310,7 @@ async function onSipMessage(data) {
       const toH = headers['to'] || '';
       const m = toH.match(/tag=([^\s;,]+)/);
       if (m) toTag = m[1];
+      sendAck();
       if (body && pc) {
         await pc.setRemoteDescription({ type: 'answer', sdp: body });
       }
@@ -306,6 +324,9 @@ async function onSipMessage(data) {
     }
   } else if (start.startsWith('SIP/2.0 180') || start.startsWith('SIP/2.0 183')) {
     setStatus('جرس... 📲');
+    if (body && pc && !pc.remoteDescription) {
+      try { await pc.setRemoteDescription({ type: 'answer', sdp: body }); } catch(e) {}
+    }
   } else if (start.match(/^SIP\/2\.0 [4-6]\d\d/)) {
     endCallUI('فشل الاتصال (' + start.substring(8, 11) + ')');
   } else if (start.startsWith('BYE')) {
@@ -316,13 +337,11 @@ async function onSipMessage(data) {
 async function startMedia() {
   const iceServers = [];
   if (callInfo.stunAddr) iceServers.push({ urls: 'stun:' + callInfo.stunAddr });
-  // API returns isTurn as boolean true (decompiled ResultOutbound), not "Y"
   if ((callInfo.isTurn === 'Y' || callInfo.isTurn === true) && callInfo.turnAddr) {
     iceServers.push({ urls: 'turn:' + callInfo.turnAddr, username: callInfo.turnId, credential: callInfo.turnPwd });
   }
   pc = new RTCPeerConnection({ iceServers });
   pc.ontrack = e => { remoteAudio.srcObject = e.streams[0]; };
-  pc.onicecandidate = e => { /* trickle via re-INVITE not implemented; candidates in initial offer */ };
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     stream.getTracks().forEach(t => pc.addTrack(t, stream));
@@ -330,14 +349,13 @@ async function startMedia() {
     setStatus('تعذر الوصول للميكروفون');
     return;
   }
-  // gather ICE then send INVITE with complete SDP (like the app's generateSipSdp)
+  const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
+  await pc.setLocalDescription(offer);
   await new Promise(res => {
     if (pc.iceGatheringState === 'complete') return res();
     pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === 'complete') res(); };
-    setTimeout(res, 4000);
+    setTimeout(res, 3500);
   });
-  const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
-  await pc.setLocalDescription(offer);
   pendingSdp = pc.localDescription.sdp;
   sendInvite(pendingSdp, null);
 }
@@ -371,27 +389,29 @@ callBtn.onclick = async () => {
     callId = rand(16) + '@esimeasy';
     fromTag = rand(8);
     cseq = 1;
-    // SIP URIs describe the backend's plain-ws hop (like the app when isTls!=Y)
-    callInfo._useWss = false;
-    // Connect via our backend proxy (wss) which relays to eSIMEasy's plain ws.
-    // Browser blocks ws:// from HTTPS pages, so we never connect directly.
-    const wsUrl = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws-proxy?host=${encodeURIComponent(info.webrtcAddr)}&port=${encodeURIComponent(info.webrtcPort)}`;
-    setStatus('جاري الاتصال بالسيرفر...');
-    // NOTE: no 'sip' subprotocol here on purpose — the browser<->proxy hop is a
-    // plain relay; requesting a subprotocol the server doesn't select back has
-    // been observed to kill the handshake through the hosting edge (1006).
-    // The proxy->eSIMEasy leg still negotiates 'sip' on its own socket.
+    const isTlsFlag = (info.isTls === 'Y' || info.isTls === true) ? '1' : '0';
+    callInfo._useWss = isTlsFlag === '1';
+
+    const wsUrl = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws-proxy?host=${encodeURIComponent(info.webrtcAddr)}&port=${encodeURIComponent(info.webrtcPort)}&tls=${isTlsFlag}`;
+    setStatus('جاري ربط البروكسي بالسيرفر...');
     ws = new WebSocket(wsUrl);
     uiEnded = false; proxyFailed = false;
-    ws.onopen = () => sendRegister(null);
+
+    ws.onopen = () => {
+      setStatus('البروكسي جاهز، جاري فتح خط SIP...');
+    };
+
     ws.onmessage = e => {
-      // Step-by-step proxy diagnostics: display but do NOT abort the call,
-      // so the markers keep flowing until the real failing leg is found.
       if (typeof e.data === 'string' && e.data.startsWith('ERROR:diag:')) {
-        setStatus('🔍 ' + e.data.slice(11));
+        const diagMsg = e.data.slice(11);
+        setStatus('🔍 ' + diagMsg);
+        if (diagMsg.startsWith('backend-ok:')) {
+          const usedScheme = diagMsg.split(':')[1];
+          callInfo._useWss = (usedScheme === 'wss');
+          sendRegister(null);
+        }
         return;
       }
-      // Real proxy errors are fatal.
       if (typeof e.data === 'string' && e.data.startsWith('ERROR:')) {
         proxyFailed = true;
         endCallUI('⚠️ ' + proxyErrorText(e.data.slice(6)));
