@@ -91,10 +91,14 @@ def esimeasy_login(google_user_id):
     try:
         r = requests.post(ESIMEASY_LOGIN_URL, json=payload, timeout=15)
         data = r.json()
-    except Exception:
-        return {}
-    if not isinstance(data, dict) or not data.get("sessionId"):
-        return {}
+    except Exception as e:
+        return {"_error": f"connection: {e}"}
+    if not isinstance(data, dict):
+        return {"_error": "bad response"}
+    if not data.get("sessionId"):
+        return {"_error": f"retCode={data.get('retCode')}",
+                "_retCode": data.get("retCode"),
+                "_raw": str(data)[:200]}
     try:
         balance = float(data.get("remainCallPoint") or 0)
     except (TypeError, ValueError):
