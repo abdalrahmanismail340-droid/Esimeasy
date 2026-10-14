@@ -1,13 +1,29 @@
 import os
 import uuid
+import base64
 from datetime import timedelta
 from flask import Flask, redirect, url_for, session, render_template, request
 from authlib.integrations.flask_client import OAuth
 from werkzeug.middleware.proxy_fix import ProxyFix
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import padding
 import requests
 from rates import RATES
 
 ESIMEASY_LOGIN_URL = "https://esimapi.esimeasy.co.kr:8444/esimeasyasd/v4/user/login"
+# AES key/IV the official app uses to encrypt the userId before login
+# (ww.u0 in the decompiled APK: AES/CBC/PKCS5Padding)
+ESIMEASY_AES_KEY = b"Ykuf2gLd95W?Zfsd"
+
+
+def esim_encrypt_user_id(plain):
+    padder = padding.PKCS7(128).padder()
+    padded = padder.update(plain.encode("utf-8")) + padder.finalize()
+    cipher = Cipher(algorithms.AES(ESIMEASY_AES_KEY),
+                    modes.CBC(ESIMEASY_AES_KEY))
+    encryptor = cipher.encryptor()
+    ct = encryptor.update(padded) + encryptor.finalize()
+    return base64.b64encode(ct).decode("ascii")
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
@@ -72,9 +88,11 @@ def esimeasy_login(google_user_id):
     if not device_id:
         device_id = str(uuid.uuid4())
         session["device_id"] = device_id
+    # The app AES-encrypts the Google user ID before sending (ww.u0).
+    enc_id = esim_encrypt_user_id(google_user_id)
     payload = {
-        "userId": google_user_id,
-        "paramUserId": google_user_id,
+        "userId": enc_id,
+        "paramUserId": enc_id,
         "authenType": "UAT0002",
         "paramAuthenType": "UAT0002",
         "deviceOs": "AT0001",
