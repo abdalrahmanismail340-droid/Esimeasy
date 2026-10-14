@@ -79,6 +79,7 @@ def ws_proxy(ws):
     try:
         backend = ws_client.create_connection(
             target_url, subprotocols=["sip"], timeout=10)
+        backend.settimeout(None)  # blocking recv after connect
     except Exception as e:
         send_error_and_close(f"backend-connect-failed:{type(e).__name__}")
         return
@@ -87,9 +88,7 @@ def ws_proxy(ws):
         try:
             while not stop.is_set():
                 try:
-                    msg = backend.recv()
-                except ws_client.WebSocketTimeoutException:
-                    continue  # backend idle (normal mid-call); keep relaying
+                    msg = backend.recv()  # blocking; raises/None on close
                 except Exception:
                     break
                 if msg is None:
@@ -106,17 +105,10 @@ def ws_proxy(ws):
     try:
         while not stop.is_set():
             try:
-                msg = ws.receive(timeout=30)
+                msg = ws.receive()  # blocking; None/raises on close
             except Exception:
                 break
             if msg is None:
-                # None = either idle timeout (still connected) or closed.
-                try:
-                    alive = ws.connected
-                except Exception:
-                    alive = False
-                if alive:
-                    continue  # browser idle mid-call; keep relaying
                 break
             try:
                 backend.send(msg)
@@ -126,6 +118,10 @@ def ws_proxy(ws):
         stop.set()
         try:
             backend.close()
+        except Exception:
+            pass
+        try:
+            ws.close()
         except Exception:
             pass
 
