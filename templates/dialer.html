@@ -6,12 +6,12 @@
 <title>الدايلر — مكالمة حقيقية</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', Tahoma, sans-serif; background: linear-gradient(135deg, #1a1a2e, #16213e); min-height: 100vh; display: flex; align-items: center; justify-content: center; color: #fff; padding: 16px 0; }
+  body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0f0f0f; min-height: 100vh; display: flex; align-items: center; justify-content: center; color: #fff; padding: 16px 0; }
   .card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 20px; padding: 24px 20px; text-align: center; max-width: 440px; width: 95%; }
   h1 { font-size: 20px; margin-bottom: 6px; }
   .balance { color: #81c784; font-size: 14px; margin-bottom: 14px; }
   .display { background: rgba(0,0,0,0.35); border-radius: 12px; padding: 14px; font-size: 26px; letter-spacing: 2px; min-height: 60px; margin-bottom: 8px; direction: ltr; overflow-x: auto; white-space: nowrap; }
-  .country { font-size: 14px; color: #4fc3f7; margin-bottom: 12px; min-height: 20px; }
+  .country { font-size: 14px; color: #ff6b35; margin-bottom: 12px; min-height: 20px; }
   .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
   .pad button { font-size: 20px; padding: 10px 0; border-radius: 50%; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.06); color: #fff; cursor: pointer; aspect-ratio: 1; max-width: 68px; margin: 0 auto; width: 100%; }
   .pad button:active { background: rgba(255,255,255,0.2); }
@@ -222,7 +222,7 @@ let pendingSdp = null, proxyFailed = false, uiEnded = false;
 const PROXY_ERRORS = {
   'no-login-session': 'الجلسة انتهت — اعمل خروج ودخول تاني',
   'missing-host-port': 'بيانات سيرفر المكالمة ناقصة (host/port)',
-  'backend-connect-failed': 'البروكسي مش قادر يوصل لسيرفر eSIMEasy',
+  'backend-connect-failed': 'البروكسي مش قادر يوصل للسيرفر',
 };
 
 function proxyErrorText(reason) {
@@ -264,7 +264,7 @@ function buildAuthHeader(challenge, method, uri) {
 
 function getTargetDialUser() {
   // الصيغة الأساسية الصافية بس — الـ backend بيبني dialString بنفس شكل التطبيق
-  // الأصلي (كود الدولة + الرقم من غير صفر محلي)، ودي الصيغة اللي سيرفر eSIMEasy متوقعها
+  // الأصلي (كود الدولة + الرقم من غير صفر محلي)، ودي الصيغة المتوقعة
   return callInfo.dialString;
 }
 
@@ -599,10 +599,10 @@ callBtn.onclick = async () => {
     if (info.rawFields) logSip(`call/req raw fields: ${info.rawFields.join(', ')}`);
     if (info.sipIdentity) logSip(`Using sessionId as SIP From identity: ${info.sipIdentity.slice(0,12)}...`);
 
-    regCallId = rand(16) + '@esimeasy';
+    regCallId = rand(16) + '@voip';
     regFromTag = rand(8);
     regCseq = 1;
-    invCallId = rand(16) + '@esimeasy';
+    invCallId = rand(16) + '@voip';
     invFromTag = rand(8);
     invCseq = 1;
 

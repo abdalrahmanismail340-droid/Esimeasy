@@ -3,17 +3,22 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>لوحة التحكم</title>
+<title>الرئيسية</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', Tahoma, sans-serif; background: linear-gradient(135deg, #1a1a2e, #16213e); min-height: 100vh; display: flex; align-items: center; justify-content: center; color: #fff; }
-  .card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 20px; padding: 40px; text-align: center; max-width: 420px; width: 90%; }
-  img.avatar { width: 72px; height: 72px; border-radius: 50%; margin-bottom: 12px; }
+  body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0f0f0f; min-height: 100vh; display: flex; align-items: center; justify-content: center; color: #fff; }
+  .card { background: linear-gradient(160deg, #1e1e1e, #141414); border: 1px solid #ff6b35; border-radius: 24px; padding: 40px 32px; text-align: center; max-width: 420px; width: 90%; box-shadow: 0 0 40px rgba(255,107,53,0.15); }
+  img.avatar { width: 76px; height: 76px; border-radius: 50%; margin-bottom: 12px; border: 2px solid #ff6b35; }
   h1 { font-size: 20px; margin-bottom: 4px; }
-  .email { color: #aaa; font-size: 14px; margin-bottom: 24px; }
-  .box { background: rgba(255,255,255,0.05); border-radius: 12px; padding: 20px; margin-bottom: 20px; color: #bbb; font-size: 14px; }
-  a.out { display: inline-block; color: #ff6b6b; text-decoration: none; font-size: 14px; border: 1px solid #ff6b6b55; padding: 10px 24px; border-radius: 10px; }
-  a.out:hover { background: #ff6b6b22; }
+  .email { color: #888; font-size: 14px; margin-bottom: 24px; }
+  .box { background: rgba(255,255,255,0.04); border-radius: 14px; padding: 18px; margin-bottom: 16px; color: #bbb; font-size: 14px; border: 1px solid rgba(255,255,255,0.08); }
+  .box.ok { color: #81c784; border-color: rgba(129,199,132,0.3); }
+  .box.warn { color: #ffb74d; border-color: rgba(255,183,77,0.3); }
+  .btn { display: block; text-decoration: none; font-size: 16px; font-weight: 700; padding: 14px 24px; border-radius: 14px; margin-bottom: 12px; transition: transform .15s; }
+  .btn:hover { transform: translateY(-2px); }
+  .btn.call { background: #2e7d32; color: #fff; box-shadow: 0 4px 16px rgba(46,125,50,0.4); }
+  .btn.out { color: #ff6b6b; border: 1px solid #ff6b6b55; font-weight: 400; font-size: 14px; }
+  .btn.out:hover { background: #ff6b6b22; }
 </style>
 </head>
 <body>
@@ -21,17 +26,13 @@
     {% if user.picture %}<img class="avatar" src="{{ user.picture }}" alt="">{% endif %}
     <h1>أهلاً {{ user.name }} 👋</h1>
     <div class="email">{{ user.email }}</div>
-    <div class="box">تم تسجيل الدخول بنجاح.<br>هنا هتتبني صفحة الـ Dialer بعد كده.</div>
     {% if esim and esim.sessionId %}
-    <div class="box" style="color:#81c784;">✅ متصل بحساب eSIMEasy<br>الرصيد: <b>{{ esim.remainCallPoint }}</b> عملة (تلقائي)</div>
+    <div class="box ok">✅ متصل<br>الرصيد: <b>{{ esim.remainCallPoint }}</b> عملة</div>
+    <a class="btn call" href="/dialer">📞 الدايلر — مكالمة حقيقية</a>
     {% else %}
-    <div class="box" style="color:#ffb74d;">⚠️ مش متصل بحساب eSIMEasy<br>الرصيد هتدخله يدوي في صفحة الأسعار{% if esim and esim._error %}<br><span style="font-size:12px;direction:ltr;">debug: {{ esim._error }}</span>{% endif %}</div>
+    <div class="box warn">⚠️ مش متصل{% if esim and esim._error %}<br><span style="font-size:12px;direction:ltr;">debug: {{ esim._error }}</span>{% endif %}</div>
     {% endif %}
-    <a class="out" href="/rates" style="color:#81c784;border-color:#81c78455;margin-bottom:12px;display:inline-block;">💰 أسعار المكالمات</a><br>
-    {% if esim and esim.sessionId %}
-    <a class="out" href="/dialer" style="color:#4fc3f7;border-color:#4fc3f755;margin-bottom:12px;display:inline-block;">📞 الدايلر — مكالمة حقيقية</a><br>
-    {% endif %}
-    <a class="out" href="/logout">تسجيل الخروج</a>
+    <a class="btn out" href="/logout">تسجيل الخروج</a>
   </div>
 </body>
 </html>
