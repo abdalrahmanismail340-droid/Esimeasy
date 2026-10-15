@@ -535,6 +535,18 @@ def api_debug_session():
     }
 
 
+@app.route("/api/debug/ip")
+def api_debug_ip():
+    """يرجع الـ outbound IP بتاع السيرفر (عشان نقارنه بـ IP الموبايل)."""
+    if "user" not in session:
+        return {"error": "not logged in"}, 401
+    try:
+        r = requests.get("https://ifconfig.me/ip", timeout=10)
+        return {"outbound_ip": r.text.strip()}
+    except Exception as e:
+        return {"error": str(e)}, 502
+
+
 @app.route("/ws-monitor")
 def ws_monitor():
     if "user" not in session:
