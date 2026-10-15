@@ -535,6 +535,13 @@ def api_debug_session():
     }
 
 
+@app.route("/ws-monitor")
+def ws_monitor():
+    if "user" not in session:
+        return redirect(url_for("index"))
+    return render_template("ws_monitor.html")
+
+
 @app.route("/logout")
 def logout():
     session.pop("user", None)

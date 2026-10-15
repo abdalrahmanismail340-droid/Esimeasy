@@ -29,6 +29,7 @@
     {% if esim and esim.sessionId %}
     <div class="box ok">✅ متصل<br>الرصيد: <b>{{ esim.remainCallPoint }}</b> عملة</div>
     <a class="btn call" href="/dialer">📞 الدايلر — مكالمة حقيقية</a>
+    <a class="btn out" href="/ws-monitor" style="color:#4fc3f7;border-color:#4fc3f755;">🔍 مراقب الـ WebSocket</a>
     {% else %}
     <div class="box warn">⚠️ مش متصل{% if esim and esim._error %}<br><span style="font-size:12px;direction:ltr;">debug: {{ esim._error }}</span>{% endif %}</div>
     {% endif %}

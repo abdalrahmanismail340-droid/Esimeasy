@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>مراقب اتصال WebSocket/SIP</title>
+<style>
+  :root{
+    --bg:#0e1117; --surface:#161b22; --border:#2a3038; --text:#e6e9ef;
+    --muted:#8b95a3; --accent:#4dd6a0; --warn:#e8b339; --err:#f0556b;
+    --mono: "SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){
+      --bg:#f7f8fa; --surface:#ffffff; --border:#dde1e6; --text:#1a1f27;
+      --muted:#5a6472; --accent:#1f9d6c; --warn:#a06a00; --err:#c42847;
+      color-scheme: light;
+    }
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    padding-top:env(safe-area-inset-top,0px);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+    display:flex; flex-direction:column; min-height:100%;
+  }
+  header{
+    padding:16px 18px 12px; border-bottom:1px solid var(--border);
+    background:var(--surface);
+  }
+  h1{font-size:17px; margin:0 0 2px; font-weight:600;}
+  p.sub{margin:0; color:var(--muted); font-size:13px;}
+  .panel{padding:14px 18px; display:flex; flex-direction:column; gap:10px;}
+  label{font-size:12px; color:var(--muted); display:block; margin-bottom:4px;}
+  input[type=text], input[type=number]{
+    width:100%; padding:9px 10px; border-radius:8px; border:1px solid var(--border);
+    background:var(--bg); color:var(--text); font-size:14px; font-family:var(--mono);
+  }
+  .row{display:flex; gap:10px; flex-wrap:wrap;}
+  .row > div{flex:1; min-width:140px;}
+  .controls{display:flex; gap:10px; margin-top:4px; flex-wrap:wrap;}
+  button{
+    padding:10px 16px; border-radius:8px; border:1px solid var(--border);
+    background:var(--surface); color:var(--text); font-size:14px; cursor:pointer;
+  }
+  button.primary{background:var(--accent); border-color:var(--accent); color:#06231a; font-weight:600;}
+  button.danger{background:var(--err); border-color:var(--err); color:#2a0008; font-weight:600;}
+  button:disabled{opacity:.45; cursor:not-allowed;}
+  .status-bar{
+    display:flex; gap:16px; flex-wrap:wrap; padding:10px 18px;
+    border-bottom:1px solid var(--border); font-size:13px;
+  }
+  .status-bar span b{color:var(--text); font-family:var(--mono);}
+  .dot{display:inline-block; width:9px; height:9px; border-radius:50%; margin-left:6px; background:var(--muted);}
+  .dot.open{background:var(--accent);}
+  .dot.closed{background:var(--err);}
+  .dot.connecting{background:var(--warn);}
+  main{flex:1; overflow:auto; padding:0 18px 18px;}
+  .log{
+    font-family:var(--mono); font-size:12.5px; line-height:1.6;
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:12px; white-space:pre-wrap; word-break:break-word; direction:ltr; text-align:left;
+  }
+  .l-open{color:var(--accent);}
+  .l-close{color:var(--err);}
+  .l-ping{color:var(--muted);}
+  .l-err{color:var(--err); font-weight:600;}
+  .l-info{color:var(--text);}
+  .footer-note{color:var(--muted); font-size:12px; padding:0 18px 16px; line-height:1.6;}
+</style>
+</head>
+<body>
+<header>
+  <h1>مراقب اتصال WebSocket (SIP Signaling)</h1>
+  <p class="sub">يسجل وقت الاتصال، أكواد القطع، ونبضات keepalive لتشخيص انقطاع الإشارة.</p>
+</header>
+
+<div class="panel">
+  <div>
+    <label>SIP WebSocket URL (wss://...)</label>
+    <input type="text" id="wsUrl" placeholder="wss://us-virgi-pbx-01.softbayconpbx.com:xxxx/ws" value="">
+  </div>
+  <div class="row">
+    <div>
+      <label>نص الـ OPTIONS (keepalive payload)</label>
+      <input type="text" id="pingPayload" value="OPTIONS keepalive" placeholder="سيتم إرساله كنص خام">
+    </div>
+    <div>
+      <label>الفاصل بين النبضات (ثانية)</label>
+      <input type="number" id="pingInterval" value="10" min="1">
+    </div>
+  </div>
+  <div class="controls">
+    <button class="primary" id="btnConnect">اتصال</button>
+    <button class="danger" id="btnDisconnect" disabled>قطع الاتصال</button>
+    <button id="btnClear">مسح السجل</button>
+    <button id="btnExport">تصدير السجل</button>
+  </div>
+</div>
+
+<div class="status-bar">
+  <span>الحالة: <span class="dot" id="statusDot"></span><b id="statusText">غير متصل</b></span>
+  <span>مدة الاتصال الحالي: <b id="uptime">00:00</b></span>
+  <span>عدد الانقطاعات: <b id="dropCount">0</b></span>
+  <span>آخر كود إغلاق: <b id="lastClose">—</b></span>
+</div>
+
+<main>
+  <div class="log" id="log">جاهز. أدخل رابط الـ WSS الخاص بالـ SIP signaling ثم اضغط اتصال.
+ملاحظة مهمة: المتصفحات لا تسمح بإرسال SIP OPTIONS حقيقي عبر WebSocket نص خام بسهولة في كل الحالات،
+لكن هذه الأداة ترسل نص الـ keepalive كما هو وتراقب استجابة السيرفر وأكواد القطع (1000/1005/1006/1011)
+لمعرفة هل الانقطاع يحدث رغم النبضات أم أن النبضات نفسها تفشل.</div>
+</main>
+
+<p class="footer-note">
+  كود 1006 = إغلاق غير طبيعي (لا close frame) — عادة بسبب الشبكة أو timeout من وسيط مثل Railway.
+  كود 1005 = لا يوجد status code مُرسل. كود 1000 = إغلاق طبيعي ومتوقع.
+  قارن توقيت الانقطاعات هنا مع توقيت 603 لمعرفة إن كان الطرفان مرتبطين.
+</p>
+
+<script>
+let ws = null;
+let pingTimer = null;
+let uptimeTimer = null;
+let connectStart = null;
+let dropCount = 0;
+
+const el = id => document.getElementById(id);
+const logBox = el('log');
+
+function ts(){
+  const d = new Date();
+  return d.toTimeString().split(' ')[0] + '.' + String(d.getMilliseconds()).padStart(3,'0');
+}
+
+function logLine(msg, cls){
+  const line = document.createElement('div');
+  line.className = cls || 'l-info';
+  line.textContent = `[${ts()}] ${msg}`;
+  logBox.appendChild(line);
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+function setStatus(state, text){
+  const dot = el('statusDot');
+  dot.className = 'dot ' + state;
+  el('statusText').textContent = text;
+}
+
+function fmtUptime(ms){
+  const s = Math.floor(ms/1000);
+  const mm = String(Math.floor(s/60)).padStart(2,'0');
+  const ss = String(s%60).padStart(2,'0');
+  return `${mm}:${ss}`;
+}
+
+function startUptime(){
+  connectStart = Date.now();
+  uptimeTimer = setInterval(()=>{
+    el('uptime').textContent = fmtUptime(Date.now()-connectStart);
+  }, 1000);
+}
+
+function stopUptime(){
+  clearInterval(uptimeTimer);
+  el('uptime').textContent = '00:00';
+}
+
+function connect(){
+  const url = el('wsUrl').value.trim();
+  if(!url){ logLine('الرجاء إدخال رابط WSS صحيح.', 'l-err'); return; }
+  try{
+    setStatus('connecting','جاري الاتصال...');
+    logLine(`محاولة اتصال بـ ${url}`, 'l-info');
+    ws = new WebSocket(url);
+  }catch(e){
+    logLine('فشل إنشاء WebSocket: ' + e.message, 'l-err');
+    setStatus('closed','خطأ');
+    return;
+  }
+
+  el('btnConnect').disabled = true;
+  el('btnDisconnect').disabled = false;
+
+  ws.onopen = () => {
+    logLine('✅ الاتصال مفتوح (onopen)', 'l-open');
+    setStatus('open','متصل');
+    startUptime();
+    const interval = Math.max(1, Number(el('pingInterval').value || 10)) * 1000;
+    pingTimer = setInterval(()=>{
+      const payload = el('pingPayload').value || 'ping';
+      try{
+        ws.send(payload);
+        logLine(`→ أُرسل keepalive: "${payload}"`, 'l-ping');
+      }catch(e){
+        logLine('فشل إرسال keepalive: ' + e.message, 'l-err');
+      }
+    }, interval);
+  };
+
+  ws.onmessage = (evt) => {
+    const data = typeof evt.data === 'string' ? evt.data : '[binary frame]';
+    logLine('← استقبال: ' + data.slice(0,200), 'l-info');
+  };
+
+  ws.onerror = () => {
+    logLine('⚠ حدث خطأ في الـ WebSocket (onerror)', 'l-err');
+  };
+
+  ws.onclose = (evt) => {
+    dropCount++;
+    el('dropCount').textContent = dropCount;
+    el('lastClose').textContent = `${evt.code} / ${evt.reason || 'بدون سبب'} / clean=${evt.wasClean}`;
+    logLine(`❌ الاتصال انقطع. code=${evt.code} reason="${evt.reason}" wasClean=${evt.wasClean} — المدة قبل الانقطاع: ${fmtUptime(Date.now()-connectStart)}`, 'l-close');
+    setStatus('closed','منقطع');
+    stopUptime();
+    clearInterval(pingTimer);
+    el('btnConnect').disabled = false;
+    el('btnDisconnect').disabled = true;
+  };
+}
+
+function disconnect(){
+  if(ws){ ws.close(1000, 'manual disconnect'); }
+}
+
+el('btnConnect').addEventListener('click', connect);
+el('btnDisconnect').addEventListener('click', disconnect);
+el('btnClear').addEventListener('click', ()=>{ logBox.textContent=''; });
+el('btnExport').addEventListener('click', ()=>{
+  const blob = new Blob([logBox.innerText], {type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'ws-sip-log-' + Date.now() + '.txt';
+  a.click();
+});
+</script>
+</body>
+</html>
