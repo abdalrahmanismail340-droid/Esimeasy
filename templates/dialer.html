@@ -216,12 +216,27 @@ let keepaliveInt = null;
 let statsInt = null;
 function startKeepalive() {
   stopKeepalive();
-  // SIP CRLF keepalive (RFC 5626) — بيمنع الـ idle timeout اللي بيقتل الـ WebSocket بعد 10 ثواني
+  // SIP OPTIONS keepalive — أقوى من CRLF، السيرفر لازم يرد عليه
   keepaliveInt = setInterval(() => {
-    if (ws && ws.readyState === 1 && inviteSent) {
-      try { ws.send('\r\n\r\n'); } catch(e) {}
+    if (ws && ws.readyState === 1 && inviteSent && callInfo && invCallId) {
+      try {
+        const branch = 'z9hG4bK' + rand(12);
+        const scheme = (callInfo.isTls === 'Y' || callInfo.isTls === true) ? 'sips' : 'sip';
+        const uri = `${scheme}:${callInfo.webrtcId}@${callInfo.webrtcAddr};transport=${scheme === 'sips' ? 'WSS' : 'WS'}`;
+        invCseq++;
+        let msg = `OPTIONS ${uri} SIP/2.0\r\n`;
+        msg += `Via: SIP/2.0/${scheme === 'sips' ? 'WSS' : 'WS'} df7jal23ls0d.invalid;branch=${branch};rport\r\n`;
+        msg += `From: "${callInfo.sipIdentity || callInfo.uniqueId}"<${scheme}:${callInfo.webrtcId}@${callInfo.webrtcAddr}>;tag=${invFromTag}\r\n`;
+        msg += `To: <${scheme}:${callInfo.webrtcId}@${callInfo.webrtcAddr}>\r\n`;
+        msg += `Call-ID: ${invCallId}\r\n`;
+        msg += `CSeq: ${invCseq} OPTIONS\r\n`;
+        msg += `Max-Forwards: 70\r\n`;
+        msg += `User-Agent: Softbay-Android\r\n`;
+        msg += `Content-Length: 0\r\n\r\n`;
+        ws.send(msg);
+      } catch(e) {}
     }
-  }, 5000);
+  }, 10000);
   // مراقبة حزم الصوت الصادرة كل 5 ثواني — عشان نعرف الصوت بيتبعت ولا لأ
   statsInt = setInterval(async () => {
     if (!pc) return;
@@ -485,6 +500,10 @@ async function onSipMessage(data) {
       } catch(e) {}
     }
   } else if (start.startsWith('SIP/2.0 200')) {
+    if (cseqH.includes('OPTIONS')) {
+      // رد الـ keepalive — الاتصال حي، تجاهل
+      return;
+    }
     if (cseqH.includes('REGISTER')) {
       if (!registered) {
         registered = true;
