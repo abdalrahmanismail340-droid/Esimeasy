@@ -485,9 +485,14 @@ async function onSipMessage(data) {
         try {
           if (!pc.remoteDescription) {
             await pc.setRemoteDescription({ type: 'answer', sdp: body });
+            logSip(`Remote SDP set from 200 OK (${body.length} chars)`);
+          } else {
+            logSip(`200 OK SDP skipped (already have remote desc from 183)`);
           }
           remoteAudio.play().catch(() => {});
-        } catch(e) {}
+        } catch(e) { logSip(`SDP set err: ${e.message}`); }
+      } else if (pc && !body) {
+        logSip(`⚠️ 200 OK بلا SDP!`);
       }
       if (!timerInt) {
         callStart = Date.now();
@@ -552,6 +557,20 @@ async function startMedia() {
         remoteAudio.play().catch(err => logSip(`Audio play err: ${err.message}`));
       }
     };
+    // تشخيص حالة الاتصال — عشان نعرف لو الـ ICE/DTLS فشل
+    pc.oniceconnectionstatechange = () => logSip(`ICE state: ${pc.iceConnectionState}`);
+    pc.onconnectionstatechange = () => logSip(`PC state: ${pc.connectionState}`);
+    let iceDone = false;
+    const iceDoneFn = () => { if (!iceDone) { iceDone = true; } };
+    pc.onicecandidate = e => {
+      if (e.candidate) {
+        const c = e.candidate.candidate;
+        const typ = (c.match(/typ (\w+)/) || [])[1] || '?';
+        logSip(`ICE candidate: ${typ} ${(c.match(/ (\d+\.\d+\.\d+\.\d+)/) || [])[1] || ''}`);
+      } else {
+        iceDoneFn();
+      }
+    };
 
     localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
 
@@ -561,10 +580,9 @@ async function startMedia() {
     setStatus('تجميع مسارات الصوت (ICE)...');
     await new Promise(res => {
       if (pc.iceGatheringState === 'complete') return res();
-      let resolved = false;
-      const done = () => { if (!resolved) { resolved = true; res(); } };
-      pc.onicecandidate = e => { if (!e.candidate) done(); };
-      setTimeout(done, 1500);
+      const check = () => { if (iceDone || pc.iceGatheringState === 'complete') res(); else setTimeout(check, 100); };
+      check();
+      setTimeout(res, 3000);
     });
 
     if (!pc || !pc.localDescription) return;
