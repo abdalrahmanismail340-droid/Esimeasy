@@ -213,6 +213,7 @@ const remoteAudio = document.getElementById('remoteAudio');
 
 let ws = null, pc = null, localStream = null, callInfo = null;
 let keepaliveInt = null;
+let statsInt = null;
 function startKeepalive() {
   stopKeepalive();
   // SIP CRLF keepalive (RFC 5626) — بيمنع الـ idle timeout اللي بيقتل الـ WebSocket بعد 10 ثواني
@@ -221,9 +222,25 @@ function startKeepalive() {
       try { ws.send('\r\n\r\n'); } catch(e) {}
     }
   }, 5000);
+  // مراقبة حزم الصوت الصادرة كل 5 ثواني — عشان نعرف الصوت بيتبعت ولا لأ
+  statsInt = setInterval(async () => {
+    if (!pc) return;
+    try {
+      const stats = await pc.getStats();
+      stats.forEach(r => {
+        if (r.type === 'outbound-rtp' && r.kind === 'audio') {
+          logSip(`RTP out: sent=${r.packetsSent || 0} bytes=${r.bytesSent || 0}`);
+        }
+        if (r.type === 'candidate-pair' && r.state === 'succeeded' && r.nominated) {
+          logSip(`Selected pair: ${r.localCandidateId} -> ${r.remoteCandidateId}`);
+        }
+      });
+    } catch(e) {}
+  }, 5000);
 }
 function stopKeepalive() {
   if (keepaliveInt) { clearInterval(keepaliveInt); keepaliveInt = null; }
+  if (statsInt) { clearInterval(statsInt); statsInt = null; }
 }
 let regCallId = '', regFromTag = '', regCseq = 1;
 let invCallId = '', invFromTag = '', invCseq = 1, toTag = '';
@@ -526,6 +543,8 @@ async function startMedia() {
   try {
     setStatus('طلب إذن الميكروفون...');
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    const atrack = localStream.getAudioTracks()[0];
+    if (atrack) logSip(`Mic: enabled=${atrack.enabled} muted=${atrack.muted} state=${atrack.readyState} label=${atrack.label.slice(0,20)}`);
   } catch (e) {
     endCallUI('تعذر الوصول للميكروفون: ' + e.message);
     return;
