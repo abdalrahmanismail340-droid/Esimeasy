@@ -212,6 +212,19 @@ const hangBtn = document.getElementById('hangBtn');
 const remoteAudio = document.getElementById('remoteAudio');
 
 let ws = null, pc = null, localStream = null, callInfo = null;
+let keepaliveInt = null;
+function startKeepalive() {
+  stopKeepalive();
+  // SIP CRLF keepalive (RFC 5626) — بيمنع الـ idle timeout اللي بيقتل الـ WebSocket بعد 10 ثواني
+  keepaliveInt = setInterval(() => {
+    if (ws && ws.readyState === 1 && inviteSent) {
+      try { ws.send('\r\n\r\n'); } catch(e) {}
+    }
+  }, 5000);
+}
+function stopKeepalive() {
+  if (keepaliveInt) { clearInterval(keepaliveInt); keepaliveInt = null; }
+}
 let regCallId = '', regFromTag = '', regCseq = 1;
 let invCallId = '', invFromTag = '', invCseq = 1, toTag = '';
 let lastInviteSeq = 1, lastInviteBranch = '';
@@ -463,6 +476,7 @@ async function onSipMessage(data) {
       }
     } else if (cseqH.includes('INVITE')) {
       setStatus('متصل ✅');
+      startKeepalive();
       const toH = headers['to'] || '';
       const m = toH.match(/tag=([^\s;,]+)/);
       if (m) toTag = m[1];
@@ -564,6 +578,7 @@ async function startMedia() {
 
 function endCallUI(msg) {
   setStatus(msg || 'انتهت المكالمة');
+  stopKeepalive();
   if (timerInt) { clearInterval(timerInt); timerInt = null; }
   callBtn.style.display = '';
   hangBtn.style.display = 'none';
