@@ -72,6 +72,12 @@ def init(secret_key):
             last_used_at INTEGER
         );
         CREATE INDEX IF NOT EXISTS links_owner ON links(owner_id);
+        CREATE TABLE IF NOT EXISTS owner_settings (
+            owner_id TEXT NOT NULL,
+            key TEXT NOT NULL,
+            value TEXT,
+            PRIMARY KEY (owner_id, key)
+        );
     """)
     key = base64.urlsafe_b64encode(hashlib.sha256(
         ("share-links:" + (secret_key or "")).encode()).digest())
@@ -214,3 +220,25 @@ def revoke_all(owner_id):
 def purge_old(days=30):
     _exec("DELETE FROM links WHERE expires_at<? OR (revoked_at IS NOT NULL AND revoked_at<?)",
           (_now() - days * 86400, _now() - days * 86400))
+
+
+# ---------- per-owner settings (recording toggle, email for the Telegram bot) ----------
+def get_setting(owner_id, key, default=None):
+    rows = _q("SELECT value FROM owner_settings WHERE owner_id=? AND key=?", (owner_id, key))
+    return rows[0]["value"] if rows else default
+
+
+def set_setting(owner_id, key, value):
+    _exec("""INSERT INTO owner_settings(owner_id, key, value) VALUES(?,?,?)
+             ON CONFLICT(owner_id, key) DO UPDATE SET value=excluded.value""",
+          (owner_id, key, None if value is None else str(value)))
+
+
+def find_owner_by_setting(key, value):
+    rows = _q("SELECT owner_id FROM owner_settings WHERE key=? AND lower(value)=lower(?)", (key, value))
+    return rows[0]["owner_id"] if rows else None
+
+
+def latest_owner():
+    rows = _q("SELECT owner_id FROM owners ORDER BY updated_at DESC LIMIT 1")
+    return rows[0]["owner_id"] if rows else None

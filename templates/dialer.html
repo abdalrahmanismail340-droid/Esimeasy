@@ -65,6 +65,14 @@
   .pad button { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
   .dtmf-line { font-size: 18px; letter-spacing: 3px; color: var(--accent); direction: ltr; min-height: 0; margin-bottom: 6px; }
   .dtmf-line:empty { display: none; }
+  .rec-banner { display: none; margin: 8px 0; padding: 8px 12px; border-radius: 999px;
+    background: rgba(255,80,80,0.15); border: 1px solid rgba(255,80,80,0.45); color: #ff8a80;
+    font-size: 13px; font-weight: 600; }
+  .rec-banner.on { display: inline-block; }
+  .rec-toggle { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    margin: 10px 0; padding: 10px 14px; border-radius: 14px; background: rgba(255,255,255,0.04);
+    border: 1px solid var(--glass-b); font-size: 13px; color: var(--silver); }
+  .rec-toggle button { font-family: inherit; }
 </style>
 </head>
 <body>
@@ -80,6 +88,13 @@
     <div class="hint">المكالمات بتتخصم من الكوينز (C)</div>
     <div class="chip-row"><button class="chip" id="refreshBtn" type="button" title="تحديث الرصيد">🔄 تحديث</button></div>
   </div></div>
+  <div class="rec-banner" id="recBanner">🔴 المكالمة بتتسجل</div>
+  {% if not shared %}
+  <div class="rec-toggle" id="recToggleRow"{% if not telegram_ready %} style="opacity:0.55"{% endif %}>
+    <span>🎙️ تسجيل المكالمات وإرسالها على تيليجرام{% if not telegram_ready %} <small>(البوت مش مفعّل)</small>{% endif %}</span>
+    <button type="button" class="chip" id="recToggle" data-on="{{ '1' if recording else '0' }}">{{ 'تشغيل ✅' if recording else 'إيقاف' }}</button>
+  </div>
+  {% endif %}
   <select class="picker" id="countryPicker" title="الدولة (للأرقام المحلية اللي بتبدأ بـ 0)">
     {% for c in countries %}<option value="{{ c.code }}"{% if c.code == '20' %} selected{% endif %}>{{ c.name }} (+{{ c.code }})</option>{% endfor %}
   </select>
@@ -758,6 +773,9 @@ async function onSipMessage(data) {
       setStatus('متصل ✅');
       updateCtlButtons();
       startStats();
+      callConnectedAt = Date.now();
+      ctrlSend({ type: 'connected' });
+      startRecording();
       if (body) await setRemoteSdp(body, '200 OK');
       else if (!pc || !pc.remoteDescription) logSip('⚠️ 200 OK بلا SDP!');
       if (!timerInt) {
@@ -902,6 +920,10 @@ function endCallUI(msg) {
   stopKeepalive();
   if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
   if (timerInt) { clearInterval(timerInt); timerInt = null; }
+  const dur = callConnectedAt ? Math.floor((Date.now() - callConnectedAt) / 1000) : 0;
+  const cost = callRate && callConnectedAt ? Math.ceil(Math.max(1, dur) / 60) * callRate : null;
+  ctrlSend({ type: 'ended', duration: dur, cost });
+  const uploadP = stopAndUploadRecording();
   callBtn.style.display = '';
   hangBtn.style.display = 'none';
   resetInCall();
@@ -909,7 +931,12 @@ function endCallUI(msg) {
   if (pc) { try { pc.close(); } catch (e) {} pc = null; }
   const sock = ws; ws = null;
   if (sock && sock.readyState <= 1) { try { sock.close(); } catch (e) {} }
+  const cSock = controlWs; controlWs = null;
+  // keep control socket open briefly so the ended event and any late cmds flush
+  setTimeout(() => { if (cSock && cSock.readyState <= 1) try { cSock.close(); } catch (e) {} }, 800);
   registered = false; inviteSent = false; established = false; pendingSdp = null; toTag = '';
+  callConnectedAt = 0; callDialled = null;
+  uploadP.then(() => {});
   if (wasConnected) { wasConnected = false; setTimeout(refreshBalance, 1500); }
 }
 
@@ -927,6 +954,137 @@ function hangup() {
   closeTimer = setTimeout(() => endCallUI('أنهيت المكالمة'), 4000);
 }
 hangBtn.onclick = hangup;
+
+// ---------- Telegram control channel + call recording ----------
+const RECORDING_ON = {{ 'true' if recording else 'false' }};
+const TG_READY = {{ 'true' if telegram_ready else 'false' }};
+let controlWs = null, controlId = '', recorder = null, recordedChunks = [], recAudioCtx = null;
+let callConnectedAt = 0, callRate = 0, callDialled = null;
+
+(function initRecToggle() {
+  const btn = document.getElementById('recToggle');
+  if (!btn) return;
+  btn.onclick = async () => {
+    if (!TG_READY) { alert('فعّل بوت تيليجرام الأول (TELEGRAM_BOT_TOKEN + TELEGRAM_OWNER_ID على Railway)'); return; }
+    const on = btn.dataset.on !== '1';
+    btn.disabled = true;
+    try {
+      const r = await fetch('/api/recording/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ on }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || r.status);
+      btn.dataset.on = j.on ? '1' : '0';
+      btn.textContent = j.on ? 'تشغيل ✅' : 'إيقاف';
+      document.getElementById('recBanner').classList.toggle('on', j.on);
+    } catch (e) { alert('فشل: ' + e.message); }
+    btn.disabled = false;
+  };
+  if (RECORDING_ON) document.getElementById('recBanner').classList.add('on');
+})();
+
+function recordingEnabled() {
+  const btn = document.getElementById('recToggle');
+  if (btn) return btn.dataset.on === '1';
+  return RECORDING_ON;
+}
+
+function openControl(target) {
+  try {
+    controlId = 'c' + rand(12);
+    callDialled = target;
+    callRate = (COUNTRY_BY_CODE[target.cc] || {}).rate || 0;
+    callConnectedAt = 0;
+    const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws-control`;
+    const sock = new WebSocket(url);
+    controlWs = sock;
+    sock.onopen = () => {
+      sock.send(JSON.stringify({
+        type: 'hello', callId: controlId, number: target.national, country: target.cc,
+        rate: callRate, coins: currentCoins(),
+      }));
+    };
+    sock.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'cmd') handleTgCmd(msg.action);
+      } catch (err) {}
+    };
+    sock.onclose = () => { if (controlWs === sock) controlWs = null; };
+  } catch (e) { logSip('control ws: ' + e.message); }
+}
+function ctrlSend(obj) {
+  if (controlWs && controlWs.readyState === 1) try { controlWs.send(JSON.stringify(obj)); } catch (e) {}
+}
+function handleTgCmd(action) {
+  if (uiEnded) { ctrlSend({ type: 'ack', action, ok: false, error: 'ended' }); return; }
+  try {
+    if (action === 'end') {
+      hangup();
+      ctrlSend({ type: 'ack', action, ok: true, state: {} });
+    } else if (action === 'mute') {
+      micMuted = !micMuted; applyMediaState();
+      ctrlSend({ type: 'ack', action, ok: true, state: { muted: micMuted, held: sipHold || localHold } });
+    } else if (action === 'hold') {
+      // reuse the hold button logic
+      if (!established) { ctrlSend({ type: 'ack', action, ok: false, error: 'not connected' }); return; }
+      holdBtn.click();
+      // ACK after a short delay so reinvite state settles; holdBtn is async via SIP
+      setTimeout(() => {
+        ctrlSend({ type: 'ack', action, ok: true, state: { muted: micMuted, held: sipHold || localHold } });
+      }, 1500);
+    } else {
+      ctrlSend({ type: 'ack', action, ok: false, error: 'unknown' });
+    }
+  } catch (e) {
+    ctrlSend({ type: 'ack', action, ok: false, error: String(e.message || e) });
+  }
+}
+
+function startRecording() {
+  if (!recordingEnabled() || !localStream) return;
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    recAudioCtx = new Ctx();
+    const dest = recAudioCtx.createMediaStreamDestination();
+    recAudioCtx.createMediaStreamSource(localStream).connect(dest);
+    if (remoteAudio.srcObject) {
+      try { recAudioCtx.createMediaStreamSource(remoteAudio.srcObject).connect(dest); } catch (e) {}
+    }
+    const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
+               : (MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '');
+    recordedChunks = [];
+    recorder = mime ? new MediaRecorder(dest.stream, { mimeType: mime }) : new MediaRecorder(dest.stream);
+    recorder.ondataavailable = e => { if (e.data && e.data.size) recordedChunks.push(e.data); };
+    recorder.start(1000);
+    document.getElementById('recBanner').classList.add('on');
+    logSip('Recording started');
+  } catch (e) { logSip('Recording err: ' + e.message); recorder = null; }
+}
+function stopAndUploadRecording() {
+  return new Promise(resolve => {
+    if (!recorder) return resolve();
+    const rec = recorder; recorder = null;
+    rec.onstop = async () => {
+      try {
+        if (recAudioCtx) { try { recAudioCtx.close(); } catch (e) {} recAudioCtx = null; }
+        if (!recordedChunks.length || !TG_READY) return resolve();
+        const blob = new Blob(recordedChunks, { type: rec.mimeType || 'audio/webm' });
+        recordedChunks = [];
+        const fd = new FormData();
+        fd.append('audio', blob, 'call.webm');
+        const dur = callConnectedAt ? Math.floor((Date.now() - callConnectedAt) / 1000) : 0;
+        const mm = String(Math.floor(dur / 60)).padStart(2, '0');
+        const ss = String(dur % 60).padStart(2, '0');
+        fd.append('duration', `${mm}:${ss}`);
+        if (callDialled) { fd.append('number', callDialled.national); fd.append('country', callDialled.cc); }
+        const r = await fetch('/api/recording/upload', { method: 'POST', body: fd });
+        logSip('Recording upload: ' + r.status);
+      } catch (e) { logSip('Recording upload err: ' + e.message); }
+      resolve();
+    };
+    try { rec.stop(); } catch (e) { resolve(); }
+  });
+}
 
 // ---------- in-call controls: mute / hold / speaker ----------
 const inCallEl = document.getElementById('inCall');
@@ -1278,6 +1436,7 @@ callBtn.onclick = async () => {
     uiEnded = false; proxyFailed = false;
     hangBtn.style.display = 'inline-flex';
     showInCall(true);
+    openControl(target);
 
     sock.onopen = () => { setStatus('البروكسي جاهز، جاري فتح خط SIP...'); startKeepalive(); };
     sock.onmessage = e => {

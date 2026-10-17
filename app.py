@@ -1,5 +1,6 @@
 from gevent import monkey
 monkey.patch_all()
+import gevent
 
 import os
 import ssl
@@ -19,6 +20,7 @@ from rates import RATES
 from iso3_codes import CALLING_CODE_TO_ISO3, RATE_PREFIX_ALIASES
 from retcodes import message_for, is_definitive
 import share_links
+import telegram_bot
 
 ESIMEASY_LOGIN_URL = "https://esimapi.esimeasy.co.kr:8444/esimeasyasd/v4/user/login"
 ESIMEASY_CALL_REQ_URL = "https://esimapi.esimeasy.co.kr:8444/baycscsd/outbound/dtls/call/req"
@@ -57,6 +59,7 @@ try:
     share_links.purge_old()
 except Exception as _e:
     print(f"[share-links] purge failed: {type(_e).__name__}", flush=True)
+telegram_bot.start()
 app.permanent_session_lifetime = timedelta(days=30)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
@@ -466,6 +469,8 @@ def dialer():
                            phone_authenticated=ctx["phone_auth"],
                            shared=ctx["mode"] == "link",
                            link_expires_at=ctx.get("expires_at"),
+                           recording=share_links.get_setting(ctx["owner_id"], "recording", "0") == "1",
+                           telegram_ready=telegram_bot.READY,
                            expiry_choices=share_links.EXPIRY_CHOICES,
                            default_hours=share_links.DEFAULT_HOURS)
 
@@ -935,9 +940,152 @@ def api_links_open():
     return {"ok": True, "redirect": url_for("dialer")}
 
 
+# ---------- Telegram control channel + call recording ----------
+import json as _json
+
+_CONTROL_CLIENTS = {}  # call_id -> ws
+
+
+@sock.route("/ws-control")
+def ws_control(ws):
+    """Browser <-> Telegram bridge for one call. Messages are JSON.
+    Client: {type:hello, callId, number, country, label, rate, coins}
+            {type:connected} | {type:ended, duration, cost}
+            {type:ack, action, ok, state?, error?}
+            {type:ping}
+    Server: {type:cmd, action:end|hold|mute}
+    """
+    call_id = None
+    try:
+        while True:
+            raw = ws.receive()
+            if raw is None:
+                break
+            if raw == BROWSER_KEEPALIVE:
+                continue
+            try:
+                msg = _json.loads(raw) if isinstance(raw, str) else None
+            except Exception:
+                continue
+            if not isinstance(msg, dict):
+                continue
+            t = msg.get("type")
+            if t == "hello":
+                call_id = str(msg.get("callId") or "")[:40]
+                if not call_id:
+                    continue
+                _CONTROL_CLIENTS[call_id] = ws
+                ctx = _ctx() or {}
+                label = msg.get("label") or (
+                    "رابط مشترك" if ctx.get("mode") == "link" else "الحساب")
+                if ctx.get("mode") == "link" and ctx.get("link_id"):
+                    label = f"رابط {ctx['link_id'][:8]}"
+                telegram_bot.register_call(
+                    call_id, msg.get("number"), msg.get("country"), label,
+                    msg.get("rate"), msg.get("coins"))
+            elif t == "connected" and call_id:
+                telegram_bot.mark_connected(call_id)
+            elif t == "ended" and call_id:
+                telegram_bot.mark_ended(call_id, msg.get("duration"), msg.get("cost"))
+            elif t == "ack" and call_id:
+                telegram_bot.ack_cmd(call_id, msg.get("action"), bool(msg.get("ok")),
+                                    msg.get("state"), msg.get("error"))
+            elif t == "ping":
+                try:
+                    ws.send(_json.dumps({"type": "pong"}))
+                except Exception:
+                    pass
+            # Pull any pending Telegram command for this call (non-blocking poll loop)
+            if call_id:
+                # Drain with a short timeout so the receive loop stays responsive;
+                # the browser also pings, which re-enters here.
+                action = telegram_bot.next_cmd(call_id, timeout=0.01)
+                while action:
+                    try:
+                        ws.send(_json.dumps({"type": "cmd", "action": action}))
+                    except Exception:
+                        break
+                    action = telegram_bot.next_cmd(call_id, timeout=0.01)
+    finally:
+        if call_id:
+            _CONTROL_CLIENTS.pop(call_id, None)
+            # If the browser closed without an ended event, notify Telegram.
+            if call_id in telegram_bot.active_calls():
+                telegram_bot.mark_ended(call_id)
+
+
+# Background pusher: when Telegram queues a command, push it to the right socket
+# without waiting for the next browser message.
+def _control_pusher():
+    while True:
+        gevent.sleep(0.3)
+        for cid, ws in list(_CONTROL_CLIENTS.items()):
+            action = telegram_bot.next_cmd(cid, timeout=0.01)
+            while action:
+                try:
+                    ws.send(_json.dumps({"type": "cmd", "action": action}))
+                except Exception:
+                    break
+                action = telegram_bot.next_cmd(cid, timeout=0.01)
+
+gevent.spawn(_control_pusher)
+
+
+@app.route("/api/recording/toggle", methods=["POST"])
+def api_recording_toggle():
+    ctx = _ctx()
+    if not ctx or ctx["mode"] != "owner":
+        return {"error": "owner only"}, 403
+    body = request.get_json(force=True, silent=True) or {}
+    on = bool(body.get("on"))
+    share_links.set_setting(ctx["owner_id"], "recording", "1" if on else "0")
+    return {"on": on}
+
+
+@app.route("/api/recording/status")
+def api_recording_status():
+    ctx = _ctx()
+    if not ctx:
+        return {"on": False}
+    oid = ctx["owner_id"]
+    on = share_links.get_setting(oid, "recording", "0") == "1"
+    return {"on": on, "tg": telegram_bot.READY}
+
+
+@app.route("/api/recording/upload", methods=["POST"])
+def api_recording_upload():
+    """Accept a recorded call audio, send it to Telegram, then delete it."""
+    ctx = _ctx()
+    if not ctx:
+        return {"error": "not logged in"}, 401
+    f = request.files.get("audio")
+    if not f:
+        return {"error": "no audio"}, 400
+    duration = request.form.get("duration") or ""
+    number = request.form.get("number") or ""
+    country = request.form.get("country") or ""
+    os.makedirs("/tmp/recordings", exist_ok=True)
+    path = f"/tmp/recordings/{uuid.uuid4().hex}.webm"
+    try:
+        f.save(path)
+        caption = ("\U0001F399\ufe0f \u062a\u0633\u062c\u064a\u0644 \u0645\u0643\u0627\u0644\u0645\u0629\n+%s %s\n\u0627\u0644\u0645\u062f\u0629: %s" % (country, telegram_bot.mask_number(number), duration))
+        result = telegram_bot.send_audio(path, caption)
+        ok = bool(result and result.get("ok"))
+        return {"ok": ok}
+    except Exception as e:
+        print(f"[recording] upload {type(e).__name__}", flush=True)
+        return {"error": "upload failed"}, 502
+    finally:
+        try:
+            os.remove(path)
+        except Exception:
+            pass
+
+
 @app.route("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "telegram": telegram_bot.ENABLED,
+            "telegramOwner": telegram_bot.OWNER_ID is not None}
 
 
 @app.route("/rates", methods=["GET", "POST"])
