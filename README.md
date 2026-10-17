@@ -45,13 +45,22 @@ gunicorn app:app --bind 0.0.0.0:5000 --worker-class gevent --workers 1 --timeout
 - `/ws-monitor` — أداة تشخيص الـ WebSocket
 - `POST /api/call/setup` — بيطلب بيانات المكالمة من eSIMEasy (`call/req`)
 - `POST /api/phone-auth/req` و`/res` — توثيق رقمك بكود واتساب (إجباري قبل المكالمات)
-- `POST /api/esim/refresh` — بيعمل دخول تاني لـ eSIMEasy ويرجع الرصيد الجديد
+- `POST /api/esim/refresh` — بيجيب الرصيد من `session/info/v1`: الكوينز (C، للمكالمات) والنقاط (P). لو الجلسة انتهت بيعمل دخول تاني
 - `POST /esim/retry` — إعادة محاولة دخول eSIMEasy
 - `/ws-proxy` — بروكسي WebSocket بين المتصفح وسيرفر الـ SIP (بيبلع رسايل الـ keepalive `__ka__` من المتصفح، وبيبعت WebSocket ping للسيرفر كل 15 ثانية)
+
+## أكواد الأخطاء
+
+`retcodes.py` فيه معاني أكواد eSIMEasy بالعربي (من نصوص التطبيق الرسمي v1.8.8)، مثلاً `-539` = الكوينز مش كفاية، `-523` = دولة مش مدعومة، `-545` = الحساب موقوف.
+
+## طلب المكالمة
+
+`call/req` بيتبعت بنفس حقول التطبيق الرسمي بالظبط (appVersion `1.8.8` و networkTp حسب نوع الشبكة). لو اترفض لسبب مش متعلق بالحساب/الرقم، بيتجرب مرة واحدة بالشكل القديم (appVersion `3.0.0` + حقول الجهاز) اللي كان شغال.
 
 ## الملفات
 
 - `app.py` — السيرفر (Flask + Authlib + flask-sock)
 - `templates/dialer.html` — الدايلر وكل منطق SIP/WebRTC
 - `rates.py` — أسعار الدقيقة لكل كود
+- `retcodes.py` — أكواد الأخطاء ← رسائل عربي
 - `iso3_codes.py` — كود الاتصال ← ISO3 (من الـ APK) + `RATE_PREFIX_ALIASES` (ألاسكا/هاواي/بورتوريكو بتتطلب على كود 1)

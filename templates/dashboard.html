@@ -27,13 +27,16 @@
     <h1>أهلاً {{ user.name }} 👋</h1>
     <div class="email">{{ user.email }}</div>
     {% if esim and esim.sessionId %}
-    <div class="box ok">✅ متصل<br>الرصيد: <b id="balance">{{ esim.remainCallPoint }}</b> عملة
+    <div class="box ok">✅ متصل<br>
+      كوينز المكالمات: <b id="coins">{{ esim.remainCallPoint }}</b> C
+      &nbsp;•&nbsp; النقاط: <b id="points">{{ esim.remainPoint if esim.remainPoint is not none else '—' }}</b> P
+      <div style="font-size:11px;color:#888;margin-top:4px;">المكالمات بتتخصم من الكوينز (C) بس — النقاط (P) مبتنفعش للمكالمات</div>
       <button id="refreshBtn" type="button" style="margin-right:8px;background:none;border:1px solid #81c78455;color:#81c784;border-radius:8px;padding:2px 8px;cursor:pointer;">🔄 تحديث</button>
     </div>
     <a class="btn call" href="/dialer">📞 الدايلر — مكالمة حقيقية</a>
     <a class="btn out" href="/ws-monitor" style="color:#4fc3f7;border-color:#4fc3f755;">🔍 مراقب الـ WebSocket</a>
     {% else %}
-    <div class="box warn">⚠️ مش متصل{% if esim and esim._error %}<br><span style="font-size:12px;direction:ltr;">debug: {{ esim._error }}</span>{% endif %}</div>
+    <div class="box warn">⚠️ مش متصل{% if esim and esim._error %}<br>{% if esim._message %}<span style="font-size:13px;">{{ esim._message }}</span><br>{% endif %}<span style="font-size:12px;direction:ltr;">debug: {{ esim._error }}</span>{% endif %}</div>
     <form method="post" action="/esim/retry" style="margin:0;">
       <button class="btn call" type="submit" style="width:100%;border:none;cursor:pointer;">🔁 حاول تاني</button>
     </form>
@@ -47,7 +50,10 @@ if (rb) rb.onclick = async () => {
   try {
     const r = await fetch('/api/esim/refresh', {method: 'POST'});
     const j = await r.json();
-    if (r.ok) document.getElementById('balance').textContent = j.balance;
+    if (r.ok) {
+      document.getElementById('coins').textContent = j.coins;
+      document.getElementById('points').textContent = j.points;
+    }
     else alert('فشل التحديث: ' + (j.error || r.status));
   } catch (e) { alert('خطأ: ' + e); }
   rb.disabled = false; rb.textContent = '🔄 تحديث';

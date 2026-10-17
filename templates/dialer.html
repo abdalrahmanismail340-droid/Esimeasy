@@ -36,7 +36,8 @@
 <body>
 <div class="card">
   <h1>📞 الدايلر</h1>
-  <div class="balance">الرصيد: <b id="balance">{{ balance }}</b> عملة <button class="refresh" id="refreshBtn" type="button">🔄</button></div>
+  <div class="balance">كوينز: <b id="balance">{{ balance }}</b> C &nbsp;•&nbsp; نقاط: <b id="points">{{ points if points is not none else '—' }}</b> P <button class="refresh" id="refreshBtn" type="button" title="تحديث الرصيد">🔄</button>
+    <div style="font-size:11px;color:#888;">المكالمات بتتخصم من الكوينز (C) بس</div></div>
   <select class="picker" id="countryPicker" title="الدولة (للأرقام المحلية اللي بتبدأ بـ 0)">
     {% for c in countries %}<option value="{{ c.code }}"{% if c.code == '20' %} selected{% endif %}>{{ c.name }} (+{{ c.code }})</option>{% endfor %}
   </select>
@@ -155,11 +156,31 @@ detectCountry();
 
 // ---------- balance ----------
 const balanceEl = document.getElementById('balance');
+function currentCoins() {
+  const v = parseFloat(String(balanceEl.textContent).replace(/[^\d.\-]/g, ''));
+  return isNaN(v) ? null : v;
+}
+function showBalances(info) {
+  if (info && info.coins !== undefined && info.coins !== null) balanceEl.textContent = info.coins;
+  if (info && info.points !== undefined && info.points !== null) document.getElementById('points').textContent = info.points;
+}
+// networkTp like the official app: NT0001 Wi-Fi, NT0003 mobile data (NT0001 when unknown)
+function networkTp() {
+  const n = typeof navigator !== 'undefined' ? navigator : {};
+  const c = n.connection || n.mozConnection || n.webkitConnection;
+  const t = c && c.type;
+  if (t === 'cellular') return 'NT0003';
+  return 'NT0001';
+}
 async function refreshBalance() {
   try {
     const r = await fetch('/api/esim/refresh', { method: 'POST' });
     const j = await r.json();
-    if (r.ok) { balanceEl.textContent = j.balance; return true; }
+    if (r.ok) {
+      balanceEl.textContent = j.coins;
+      document.getElementById('points').textContent = j.points;
+      return true;
+    }
     logSip('Balance refresh failed: ' + (j.error || r.status));
   } catch (e) { logSip('Balance refresh error: ' + e); }
   return false;
@@ -195,7 +216,7 @@ async function requestAuthCode() {
       st2.dataset.national = parsed.national;
       msg.textContent = 'الكود اتبعت واتساب ✅ دخله هنا';
     } else {
-      msg.textContent = 'فشل: ' + (j.raw || j.error || j.retCode || '؟');
+      msg.textContent = 'فشل: ' + (j.message || j.error || j.raw || j.retCode || '؟');
     }
   } catch (e) { msg.textContent = 'خطأ: ' + e; }
 }
@@ -217,7 +238,7 @@ async function submitAuthCode() {
       document.getElementById('authOk').style.display = '';
       msg.textContent = '';
     } else {
-      msg.textContent = 'الكود غلط أو فشل: ' + (j.raw || j.error || j.retCode || '؟');
+      msg.textContent = 'الكود غلط أو فشل: ' + (j.message || j.error || j.raw || j.retCode || '؟');
     }
   } catch (e) { msg.textContent = 'خطأ: ' + e; }
 }
@@ -757,6 +778,12 @@ window.addEventListener('beforeunload', () => {
 callBtn.onclick = async () => {
   const target = parseNumber(numInput.value);
   if (!target || !target.national) { setStatus('اكتب الرقم الأول'); return; }
+  const country = COUNTRY_BY_CODE[target.cc];
+  const coins = currentCoins();
+  if (country && coins !== null && coins < country.rate) {
+    setStatus(`⚠️ كوينزك ${coins} C أقل من سعر الدقيقة لـ ${country.name} (${country.rate} C/دقيقة)`);
+    if (!confirm(`كوينزك ${coins} C وسعر الدقيقة لـ ${country.name} ${country.rate} C.\nالسيرفر غالباً هيرفض المكالمة (رصيد مش كفاية).\nلو شحنت كوينز دلوقتي اضغط 🔄 الأول.\n\nتكمل برضه؟`)) return;
+  }
   setStatus('تجهيز المكالمة...');
   timerEl.textContent = '';
   sipLogEl.textContent = `SIP Log: بدء الاتصال بـ +${target.cc} ${target.national}...`;
@@ -766,15 +793,19 @@ callBtn.onclick = async () => {
     const r = await fetch('/api/call/setup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ number: target.national, country_code: target.cc })
+      body: JSON.stringify({ number: target.national, country_code: target.cc, networkTp: networkTp() })
     });
     const info = await r.json();
     if (info.error) {
-      setStatus('خطأ: ' + info.error + (info.retCode !== undefined && info.retCode !== null ? ` (retCode ${info.retCode})` : ''));
+      showBalances(info);
+      const codeTxt = info.retCode !== undefined && info.retCode !== null ? ` (retCode ${info.retCode})` : '';
+      setStatus((info.message ? '⚠️ ' + info.message : 'خطأ: ' + info.error + (info.retMsg ? ' — ' + info.retMsg : '')) + codeTxt);
+      logSip(`call/req rejected: retCode=${info.retCode} retMsg=${info.retMsg || ''}`);
       callBtn.style.display = '';
       return;
     }
     callInfo = info;
+    showBalances(info);
     logSip(`Setup OK: ${info.webrtcAddr}:${info.webrtcPort} dial=${info.dialString}`);
     if (info.rawFields) logSip(`call/req fields: ${info.rawFields.join(', ')}`);
 

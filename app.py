@@ -17,11 +17,18 @@ import requests
 import websocket as ws_client
 from rates import RATES
 from iso3_codes import CALLING_CODE_TO_ISO3, RATE_PREFIX_ALIASES
+from retcodes import message_for, is_definitive
 
 ESIMEASY_LOGIN_URL = "https://esimapi.esimeasy.co.kr:8444/esimeasyasd/v4/user/login"
 ESIMEASY_CALL_REQ_URL = "https://esimapi.esimeasy.co.kr:8444/baycscsd/outbound/dtls/call/req"
 ESIMEASY_AUTH_REQ_URL = "https://esimapi.esimeasy.co.kr:8444/esimeasyasd/user/authen/whatsapp/req"
 ESIMEASY_AUTH_RES_URL = "https://esimapi.esimeasy.co.kr:8444/esimeasyasd/user/authen/whatsapp/res"
+ESIMEASY_SESSION_INFO_URL = "https://esimapi.esimeasy.co.kr:8444/esimeasyasd/session/info/v1"
+# Current official app version (APK v1.8.8, versionCode 132). LEGACY_APP_VERSION is
+# what this project sent before and is known to work; used only as a fallback.
+APP_VERSION = "1.8.8"
+LEGACY_APP_VERSION = "3.0.0"
+NETWORK_TYPES = {"NT0000", "NT0001", "NT0003"}  # unknown / wifi / cellular (MakeOutbound)
 # AES key/IV the official app uses to encrypt the userId before login
 ESIMEASY_AES_KEY = b"Ykuf2gLd95W?Zfsd"
 
@@ -265,6 +272,13 @@ def callback():
     return redirect(url_for("index"))
 
 
+def _num(v):
+    try:
+        return float(v or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def esimeasy_login(google_user_id, email=""):
     device_id = session.get("device_id")
     if not device_id:
@@ -291,8 +305,14 @@ def esimeasy_login(google_user_id, email=""):
     last_data = {}
     last_err = None
 
-    for enc_id in candidates:
-        for use_json in (True, False):
+    # Same identity order as before (the official app sends AES(google id) only);
+    # each identity is tried with the current app version first, then the legacy one,
+    # before moving on, so a version problem can never switch us to another account.
+    attempts = [(enc_id, ver, use_json)
+                for enc_id in candidates
+                for ver in (APP_VERSION, LEGACY_APP_VERSION)
+                for use_json in (True, False)]
+    for enc_id, app_version, use_json in attempts:
             payload = {
                 "userId": enc_id,
                 "paramUserId": enc_id,
@@ -306,7 +326,7 @@ def esimeasy_login(google_user_id, email=""):
                 "pushToken": SPOOFED_PUSH_TOKEN,
                 "installRootId": SPOOFED_INSTALL_ROOT,
                 "isTest": False if use_json else "false",
-                "appVersion": "3.0.0",
+                "appVersion": app_version,
                 "languageCd": "en",
             }
             try:
@@ -324,13 +344,13 @@ def esimeasy_login(google_user_id, email=""):
 
             last_data = data
             if data.get("sessionId"):
-                try:
-                    balance = float(data.get("remainCallPoint") or 0)
-                except (TypeError, ValueError):
-                    balance = 0
+                if app_version != APP_VERSION:
+                    print(f"[login] succeeded only with legacy appVersion {app_version}", flush=True)
                 return {
                     "sessionId": data.get("sessionId"),
-                    "remainCallPoint": balance,
+                    "remainCallPoint": _num(data.get("remainCallPoint")),
+                    "remainPoint": _num(data.get("remainPoint")),
+                    "appVersion": app_version,
                     "memberId": data.get("memberId", ""),
                     "email": data.get("email", ""),
                 }
@@ -340,8 +360,10 @@ def esimeasy_login(google_user_id, email=""):
 
     ret_code = last_data.get("retCode")
     ret_msg = last_data.get("retMsg") or last_data.get("message") or ""
+    print(f"[login REJECTED] retCode={ret_code} retMsg={ret_msg!r}", flush=True)
     return {
         "_error": f"[b3] retCode={ret_code} {ret_msg}".strip(),
+        "_message": message_for(ret_code),
         "_retCode": ret_code,
         "_raw": str(last_data)[:250],
     }
@@ -360,6 +382,7 @@ def dialer():
         key=lambda c: c["name"])
     return render_template("dialer.html", user=session["user"],
                            balance=esim.get("remainCallPoint", 0),
+                           points=esim.get("remainPoint"),
                            countries=countries,
                            phone_authenticated=bool(session.get("phone_authenticated")))
 
@@ -394,41 +417,77 @@ def api_call_setup():
         # كود دولة مش موجود في الجدول (نادر) — fallback لمنع كراش، لكن ده
         # هيفشل زي قبل كده لو السيرفر فعلاً بيتحقق من القيمة دي.
         unique_id = uuid.uuid4().hex
-    device_id = session.get("device_id") or str(uuid.uuid4())
+    network_tp = str(body.get("networkTp", "")).strip().upper()
+    if network_tp not in NETWORK_TYPES:
+        network_tp = "NT0001"  # Wi-Fi: what the working requests used
 
+    # Exactly the fields the official app sends (MakeOutbound, APK v1.8.8).
     payload = {
-        "sessionId": session_id,
         "paramUniqueId": unique_id,
-        "nationalUniqueId": unique_id,
         "paramNationalId": country_code,
-        "nationalId": country_code,
         "paramPhoneId": dial_number,
+        "sessionId": session_id,
+        "nationalUniqueId": unique_id,
+        "nationalId": country_code,
         "phoneId": dial_number,
-        "networkTp": "NT0001",
+        "networkTp": network_tp,
         "appCd": "ACT0060",
-        "appVersion": "3.0.0",
+        "appVersion": APP_VERSION,
         "languageCd": "en",
-        "deviceOs": "AT0001",
-        "deviceId": device_id,
-        "deviceModel": "SM-A366B",
-        "deviceOsVersion": "14",
-        "pushToken": SPOOFED_PUSH_TOKEN,
-        "installRootId": SPOOFED_INSTALL_ROOT,
     }
-    try:
-        r = requests.post(ESIMEASY_CALL_REQ_URL, json=payload,
+    # Previous request shape (legacy appVersion + device/push fields). It got
+    # retCode=1 on 2026-10-17 03:27 Cairo, so it is kept as a one-time fallback
+    # when the app-exact request is rejected for a non-account reason.
+    device_id = session.get("device_id") or str(uuid.uuid4())
+    legacy_payload = dict(payload, networkTp="NT0001", appVersion=LEGACY_APP_VERSION,
+                          deviceOs="AT0001", deviceId=device_id, deviceModel="SM-A366B",
+                          deviceOsVersion="14", pushToken=SPOOFED_PUSH_TOKEN,
+                          installRootId=SPOOFED_INSTALL_ROOT)
+
+    def _post(p):
+        r = requests.post(ESIMEASY_CALL_REQ_URL, json=p,
                           headers={"User-Agent": "okhttp/4.9.3"}, timeout=20)
-        data = r.json()
+        return r.json()
+
+    def _ok(d):
+        return isinstance(d, dict) and bool(d.get("webrtcId"))
+
+    def _code_msg(d):
+        d = d if isinstance(d, dict) else {}
+        return d.get("retCode"), (d.get("retMsg") or d.get("message") or "")
+
+    try:
+        data = _post(payload)
     except Exception as e:
         return {"error": f"call setup failed: {e}"}, 502
-    if not isinstance(data, dict) or not data.get("webrtcId"):
+    used = "app"
+    if not _ok(data):
+        code, msg = _code_msg(data)
+        # rejection logging: code + message only
+        print(f"[call/req REJECTED] retCode={code} retMsg={msg!r}", flush=True)
+        if not is_definitive(code):
+            try:
+                legacy = _post(legacy_payload)
+            except Exception as e:
+                legacy = None
+                print(f"[call/req legacy fallback failed] {type(e).__name__}", flush=True)
+            if _ok(legacy):
+                data, used = legacy, "legacy"
+            elif legacy is not None:
+                lcode, lmsg = _code_msg(legacy)
+                print(f"[call/req REJECTED legacy] retCode={lcode} retMsg={lmsg!r}", flush=True)
+    if not _ok(data):
+        code, msg = _code_msg(data)
         return {"error": "call setup rejected",
-                "retCode": data.get("retCode") if isinstance(data, dict) else None,
-                "raw": str(data)[:300]}, 502
+                "retCode": code,
+                "retMsg": msg,
+                "message": message_for(code, msg),
+                "coins": esim.get("remainCallPoint"),
+                "points": esim.get("remainPoint")}, 502
 
     # Log only non-secret diagnostics (never sessionId / webrtcPwd / turnPwd).
-    print(f"[call/req] retCode={data.get('retCode')} callSequence={data.get('callSequence')} "
-          f"country_code={country_code} uniqueId={unique_id} "
+    print(f"[call/req] retCode={data.get('retCode')} via={used} callSequence={data.get('callSequence')} "
+          f"country_code={country_code} uniqueId={unique_id} networkTp={network_tp} "
           f"isTls={data.get('isTls')} isDtls={data.get('isDtls')} isTurn={data.get('isTurn')} "
           f"fields={sorted(data.keys())}", flush=True)
 
@@ -456,6 +515,8 @@ def api_call_setup():
         # كل الحقول الراجعة من السيرفر من غير فلترة — عشان نشوف أي حاجة ناقصة
         # في الريسبونس من غير ما نفتح Railway logs كل مرة.
         "rawFields": list(data.keys()),
+        "coins": esim.get("remainCallPoint"),
+        "points": esim.get("remainPoint"),
     }
 
 
@@ -509,7 +570,9 @@ def api_phone_auth_req():
     session["phone_auth_pending"] = {"nationalId": national_id, "phoneId": phone_id,
                                      "seqNo": data.get("seqNo", "")}
     return {"retCode": data.get("retCode"), "seqNo": data.get("seqNo", ""),
-            "retryCount": data.get("retryCount", 0), "raw": str(data)[:300]}
+            "retryCount": data.get("retryCount", 0),
+            "message": message_for(data.get("retCode"), data.get("retMsg") or ""),
+            "raw": str(data)[:300]}
 
 
 @app.route("/api/phone-auth/res", methods=["POST"])
@@ -548,7 +611,9 @@ def api_phone_auth_res():
     if ok:
         session["phone_authenticated"] = True
         session.pop("phone_auth_pending", None)
-    return {"retCode": data.get("retCode"), "ok": ok, "raw": str(data)[:300]}
+    return {"retCode": data.get("retCode"), "ok": ok,
+            "message": message_for(data.get("retCode"), data.get("retMsg") or ""),
+            "raw": str(data)[:300]}
 
 
 @app.route("/api/debug/session")
@@ -605,15 +670,56 @@ def esim_retry():
     return redirect(url_for("index"))
 
 
+def _session_info(session_id):
+    """session/info/v1 (same request as the official app's MakeSessionInfo).
+    Returns the parsed dict on retCode 1, else None."""
+    payload = {
+        "sessionId": session_id,
+        "isPushOn": True,
+        "pushToken": SPOOFED_PUSH_TOKEN,
+        "deviceOs": "AT0001",
+        "installRootId": SPOOFED_INSTALL_ROOT,
+        "isTest": False,
+        "appVersion": APP_VERSION,
+        "languageCd": "en",
+    }
+    try:
+        r = requests.post(ESIMEASY_SESSION_INFO_URL, json=payload,
+                          headers={"User-Agent": "okhttp/4.9.3", "Accept": "application/json"},
+                          timeout=15)
+        data = r.json()
+    except Exception as e:
+        print(f"[session/info] failed: {type(e).__name__}", flush=True)
+        return None
+    if isinstance(data, dict) and str(data.get("retCode")) == "1":
+        return data
+    d = data if isinstance(data, dict) else {}
+    print(f"[session/info REJECTED] retCode={d.get('retCode')} "
+          f"retMsg={(d.get('retMsg') or d.get('message') or '')!r}", flush=True)
+    return None
+
+
 @app.route("/api/esim/refresh", methods=["POST"])
 def api_esim_refresh():
-    """Re-login to eSIMEasy to fetch a fresh balance (remainCallPoint)."""
+    """Fresh balances: Easy Coins (C, remainCallPoint - pays for calls) and
+    Easy Points (P, remainPoint). Uses session/info/v1; re-logs in only if the
+    session is no longer valid."""
     if "user" not in session:
         return {"error": "not logged in"}, 401
-    result = _relogin(keep_on_failure=True)
-    if not result.get("sessionId"):
-        return {"error": result.get("_error", "login failed")}, 502
-    return {"balance": result.get("remainCallPoint", 0)}
+    esim = dict(session.get("esimeasy") or {})
+    info = _session_info(esim["sessionId"]) if esim.get("sessionId") else None
+    if info is not None:
+        esim["remainCallPoint"] = _num(info.get("remainCallPoint"))
+        esim["remainPoint"] = _num(info.get("remainPoint"))
+        session["esimeasy"] = esim
+        source = "session"
+    else:
+        esim = _relogin(keep_on_failure=True)
+        if not esim.get("sessionId"):
+            return {"error": esim.get("_message") or esim.get("_error", "login failed")}, 502
+        source = "login"
+    return {"coins": esim.get("remainCallPoint", 0), "points": esim.get("remainPoint", 0),
+            "balance": esim.get("remainCallPoint", 0), "source": source}
 
 
 @app.route("/logout")
