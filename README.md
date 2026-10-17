@@ -1,43 +1,57 @@
-# eSIMEasy Web — Google Login (Railway ready)
+# eSIMEasy Web — Dialer (Railway ready)
 
-صفحة دخول بجوجل + لوحة تحكم بعد الدخول. جاهزة للرفع على Railway.
+تطبيق Flask: دخول بجوجل ← تسجيل دخول eSIMEasy ← دايلر بيتصل عن طريق SIP over WebSocket + WebRTC.
 
-## 1. اعمل Google OAuth credentials
+> ⚠️ ده عميل غير رسمي. استخدامه ممكن يكون ضد شروط eSIMEasy والحساب ممكن يتقفل.
 
-1. افتح [Google Cloud Console](https://console.cloud.google.com/)
-2. اعمل مشروع جديد (أي اسم)
-3. من القائمة: **APIs & Services → OAuth consent screen**
-   - اختار **External** → املا الاسم والإيميل → ضيف الـ scopes: `openid`, `email`, `profile`
-4. من القائمة: **APIs & Services → Credentials → Create Credentials → OAuth client ID**
-   - النوع: **Web application**
-   - في **Authorized redirect URIs** ضيف:
-     - `https://YOUR-APP.up.railway.app/callback` (هتعرفه بعد الرفع)
-     - `http://localhost:5000/callback` (للتجربة على جهازك)
-5. انسخ الـ **Client ID** والـ **Client Secret**
+## المتغيرات (Railway Variables)
 
-## 2. الرفع على Railway
+| المتغير | ملاحظات |
+|---|---|
+| `GOOGLE_CLIENT_ID` | من Google Cloud Console (OAuth client — Web application) |
+| `GOOGLE_CLIENT_SECRET` | نفس المكان |
+| `SECRET_KEY` | نص عشوائي طويل (لازم يتحط، وإلا الجلسات مش آمنة) |
 
-1. ارفع المشروع على GitHub (أو `railway up` من الـ CLI)
-2. في Railway: **New Project → Deploy from GitHub**
-3. ضيف الـ Environment Variables:
-   - `GOOGLE_CLIENT_ID` = اللي نسخته
-   - `GOOGLE_CLIENT_SECRET` = اللي نسخته
-   - `SECRET_KEY` = أي نص عشوائي طويل
-4. بعد ما يشتغل، خد رابط التطبيق وضيفه في الـ redirect URIs في جوجل (خطوة 1.4)
+في Google Console ضيف الـ redirect URI: `https://YOUR-APP.up.railway.app/callback` (و`http://localhost:5000/callback` للتجربة).
 
-## 3. التجربة محلياً
+## التشغيل على Railway
 
-```bash
-pip install -r requirements.txt
-export GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... SECRET_KEY=...
-python app.py
+- الـ builder: **Railpack**، وPython متثبت على **3.12** (`.python-version`).
+- أمر التشغيل (في `railway.json` و`Procfile`، ولازم يكون نفسه في إعدادات الخدمة لو متغير هناك):
+
+```
+gunicorn app:app --bind 0.0.0.0:$PORT --worker-class gevent --workers 1 --timeout 0
 ```
 
-وافتح `http://localhost:5000`
+  - `--worker-class gevent` إجباري: الـ `/ws-proxy` بيفضل مفتوح طول المكالمة. الـ worker العادي (sync) بيتقفل بعد 30 ثانية وبيقطع المكالمة وبيوقف الموقع كله.
+  - `--workers 1`: البروكسي والجلسة بيشتغلوا على process واحدة.
+  - `--timeout 0`: عشان المكالمات الطويلة متتقطعش.
+- Health check: `/health`.
+
+## التشغيل محلياً
+
+```bash
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt
+export GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... SECRET_KEY=...
+gunicorn app:app --bind 0.0.0.0:5000 --worker-class gevent --workers 1 --timeout 0
+```
+
+## الصفحات والـ API
+
+- `/` — الدخول / لوحة التحكم (الرصيد + زرار تحديث، وزرار "حاول تاني" لو دخول eSIMEasy فشل)
+- `/dialer` — الدايلر. الأرقام اللي بتبدأ بـ `0` بتتحسب على الدولة المختارة (مصر +20 افتراضي)، والأرقام اللي بتبدأ بـ `+` أو `00` الدولة بتتعرف لوحدها.
+- `/rates` — حساب الدقايق حسب الرصيد
+- `/ws-monitor` — أداة تشخيص الـ WebSocket
+- `POST /api/call/setup` — بيطلب بيانات المكالمة من eSIMEasy (`call/req`)
+- `POST /api/phone-auth/req` و`/res` — توثيق رقمك بكود واتساب (إجباري قبل المكالمات)
+- `POST /api/esim/refresh` — بيعمل دخول تاني لـ eSIMEasy ويرجع الرصيد الجديد
+- `POST /esim/retry` — إعادة محاولة دخول eSIMEasy
+- `/ws-proxy` — بروكسي WebSocket بين المتصفح وسيرفر الـ SIP (بيبلع رسايل الـ keepalive `__ka__` من المتصفح، وبيبعت WebSocket ping للسيرفر كل 15 ثانية)
 
 ## الملفات
 
-- `app.py` — التطبيق (Flask + Authlib)
-- `templates/login.html` — صفحة الدخول
-- `templates/dashboard.html` — صفحة بعد الدخول (مكان الـ Dialer بعدين)
-- `Procfile` / `railway.json` / `requirements.txt` — إعدادات Railway
+- `app.py` — السيرفر (Flask + Authlib + flask-sock)
+- `templates/dialer.html` — الدايلر وكل منطق SIP/WebRTC
+- `rates.py` — أسعار الدقيقة لكل كود
+- `iso3_codes.py` — كود الاتصال ← ISO3 (من الـ APK) + `RATE_PREFIX_ALIASES` (ألاسكا/هاواي/بورتوريكو بتتطلب على كود 1)

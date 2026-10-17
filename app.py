@@ -16,7 +16,7 @@ from cryptography.hazmat.primitives import padding
 import requests
 import websocket as ws_client
 from rates import RATES
-from iso3_codes import CALLING_CODE_TO_ISO3
+from iso3_codes import CALLING_CODE_TO_ISO3, RATE_PREFIX_ALIASES
 
 ESIMEASY_LOGIN_URL = "https://esimapi.esimeasy.co.kr:8444/esimeasyasd/v4/user/login"
 ESIMEASY_CALL_REQ_URL = "https://esimapi.esimeasy.co.kr:8444/baycscsd/outbound/dtls/call/req"
@@ -41,7 +41,9 @@ def esim_encrypt_user_id(plain):
 
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
+app.secret_key = os.environ.get("SECRET_KEY") or "dev-secret-change-me"
+if app.secret_key == "dev-secret-change-me":
+    print("[warn] SECRET_KEY is not set - using an insecure dev key. Set SECRET_KEY in Railway.", flush=True)
 app.permanent_session_lifetime = timedelta(days=30)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
@@ -55,6 +57,7 @@ google = oauth.register(
 )
 
 sock = Sock(app)
+BROWSER_KEEPALIVE = "__ka__"
 
 
 @sock.route("/ws-echo")
@@ -188,8 +191,19 @@ def ws_proxy(ws):
         finally:
             stop.set()
 
+    def backend_pinger():
+        # WebSocket-level ping to the SIP server every 15s so idle connections
+        # are not dropped (instead of injecting SIP OPTIONS into the dialog).
+        while not stop.wait(15):
+            try:
+                backend.ping("ka")
+            except Exception:
+                stop.set()
+                break
+
     t = threading.Thread(target=backend_to_browser, daemon=True)
     t.start()
+    threading.Thread(target=backend_pinger, daemon=True).start()
     try:
         while not stop.is_set():
             try:
@@ -198,6 +212,9 @@ def ws_proxy(ws):
                 break
             if msg is None:
                 break
+            if msg == BROWSER_KEEPALIVE:
+                # browser <-> proxy keepalive; never forwarded to the SIP server
+                continue
             try:
                 backend.send(msg)
             except Exception:
@@ -337,8 +354,14 @@ def dialer():
     esim = session.get("esimeasy") or {}
     if not esim.get("sessionId"):
         return redirect(url_for("index"))
+    countries = sorted(
+        ({"code": code, "name": name, "rate": rate}
+         for code, entries in RATES.items() for name, rate in entries[:1]),
+        key=lambda c: c["name"])
     return render_template("dialer.html", user=session["user"],
-                           balance=esim.get("remainCallPoint", 0))
+                           balance=esim.get("remainCallPoint", 0),
+                           countries=countries,
+                           phone_authenticated=bool(session.get("phone_authenticated")))
 
 
 @app.route("/api/call/setup", methods=["POST"])
@@ -356,6 +379,13 @@ def api_call_setup():
         return {"error": "missing number"}, 400
 
     dial_number = number.lstrip("0")
+    # Some rate prefixes (e.g. 1907 Alaska, 1808 Hawaii, 1787/1939 Puerto Rico)
+    # are not country codes in the official app's table: they are dialled as
+    # country "1" with the area code kept as part of the national number.
+    alias = RATE_PREFIX_ALIASES.get(country_code)
+    if alias:
+        dial_number = country_code[len(alias):] + dial_number
+        country_code = alias
     # التطبيق الأصلي بيبعت كود الدولة بنظام ISO3 (زي "EGY" لمصر، "USA" لأمريكا)
     # في paramUniqueId/nationalUniqueId — مش UUID عشوائي زي ما كنا باعتين.
     # الجدول ده مستخرج من tt.smali في الـ APK الرسمي.
@@ -396,13 +426,11 @@ def api_call_setup():
                 "retCode": data.get("retCode") if isinstance(data, dict) else None,
                 "raw": str(data)[:300]}, 502
 
-    # طباعة الـ response الكامل في لوج السيرفر (Railway logs) — ده بيوريك أي حقل
-    # خفي (زي confirm token، billing id، caller verification flag) ممكن يكون
-    # السيرفر بيستناه ومش موجود في الطلب بتاعنا. شوفه بعد أي محاولة اتصال فاشلة.
-    print(f"[call/req FULL RESPONSE] {data}", flush=True)
-    print(f"[call/req FULL PAYLOAD SENT] {payload}", flush=True)
-    print(f"[call/req] country_code={country_code} -> ISO3 uniqueId={unique_id}", flush=True)
-    print(f"[call/req] sipIdentity (sessionId used as SIP From)={session_id}", flush=True)
+    # Log only non-secret diagnostics (never sessionId / webrtcPwd / turnPwd).
+    print(f"[call/req] retCode={data.get('retCode')} callSequence={data.get('callSequence')} "
+          f"country_code={country_code} uniqueId={unique_id} "
+          f"isTls={data.get('isTls')} isDtls={data.get('isDtls')} isTurn={data.get('isTurn')} "
+          f"fields={sorted(data.keys())}", flush=True)
 
     return {
         "callSequence": data.get("callSequence"),
@@ -456,6 +484,10 @@ def api_phone_auth_req():
     phone_id = str(body.get("phoneId", "")).strip().lstrip("0")
     if not national_id or not phone_id:
         return {"error": "nationalId and phoneId required"}, 400
+    alias = RATE_PREFIX_ALIASES.get(national_id)
+    if alias:
+        phone_id = national_id[len(alias):] + phone_id
+        national_id = alias
     esim = session["esimeasy"]
     device_id = session.get("device_id") or str(uuid.uuid4())
     session["device_id"] = device_id
@@ -554,10 +586,41 @@ def ws_monitor():
     return render_template("ws_monitor.html")
 
 
+def _relogin(keep_on_failure=False):
+    user = session.get("user") or {}
+    result = esimeasy_login(user.get("google_id", ""), user.get("email", ""))
+    current = session.get("esimeasy") or {}
+    # a failed balance refresh must not wipe a working eSIMEasy session
+    if result.get("sessionId") or not (keep_on_failure and current.get("sessionId")):
+        session["esimeasy"] = result
+    return result
+
+
+@app.route("/esim/retry", methods=["POST"])
+def esim_retry():
+    """Retry the eSIMEasy login without logging out of Google."""
+    if "user" not in session:
+        return redirect(url_for("index"))
+    _relogin()
+    return redirect(url_for("index"))
+
+
+@app.route("/api/esim/refresh", methods=["POST"])
+def api_esim_refresh():
+    """Re-login to eSIMEasy to fetch a fresh balance (remainCallPoint)."""
+    if "user" not in session:
+        return {"error": "not logged in"}, 401
+    result = _relogin(keep_on_failure=True)
+    if not result.get("sessionId"):
+        return {"error": result.get("_error", "login failed")}, 502
+    return {"balance": result.get("remainCallPoint", 0)}
+
+
 @app.route("/logout")
 def logout():
-    session.pop("user", None)
-    session.pop("esimeasy", None)
+    # keep device_id so the account keeps seeing the same "device"
+    for key in ("user", "esimeasy", "phone_authenticated", "phone_auth_pending", "balance"):
+        session.pop(key, None)
     return redirect(url_for("index"))
 
 
