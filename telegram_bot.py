@@ -21,6 +21,39 @@ import requests
 TOKEN = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
 OWNER_RAW = (os.environ.get("TELEGRAM_OWNER_ID") or "").strip()
 OWNER_ID = int(OWNER_RAW) if OWNER_RAW.lstrip("-").isdigit() else None
+
+# ---------- admin list (persistent) ----------
+_ADMINS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tg_admins.json")
+
+def _load_admins():
+    try:
+        with open(_ADMINS_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+            return set(int(x) for x in data if str(x).lstrip("-").isdigit())
+    except Exception:
+        return set()
+
+def _save_admins(admins):
+    try:
+        with open(_ADMINS_FILE, "w", encoding="utf-8") as f:
+            json.dump(sorted(admins), f)
+    except Exception as e:
+        print(f"[tg] save admins failed: {type(e).__name__}", flush=True)
+
+def is_admin(uid):
+    try:
+        uid = int(uid)
+    except Exception:
+        return False
+    if OWNER_ID is not None and uid == OWNER_ID:
+        return True
+    return uid in _load_admins()
+
+def is_owner(uid):
+    try:
+        return OWNER_ID is not None and int(uid) == OWNER_ID
+    except Exception:
+        return False
 API_BASE = (os.environ.get("TELEGRAM_API_BASE") or "https://api.telegram.org").rstrip("/")
 ENABLED = bool(TOKEN)
 READY = ENABLED and OWNER_ID is not None
@@ -205,12 +238,12 @@ def _handle_start(chat_id, from_id):
              f"جنب <code>TELEGRAM_BOT_TOKEN</code>، وبعدين اعمل Redeploy.",
              chat_id=chat_id)
         return
-    if from_id != OWNER_ID:
+    if not is_admin(from_id):
         return  # ignore strangers
     send(f"أهلاً 👋\n{_help()}")
 
 
-def _handle_text(text):
+def _handle_text(text, from_id=None):
     import share_links as S
     parts = text.strip().split()
     cmd = (parts[0].split("@")[0] if parts else "").lower()
@@ -226,6 +259,34 @@ def _handle_text(text):
             send("مفيش جلسة Easy eSIM محفوظة. سجّل دخول على الموقع الأول."); return
         coins = owner["esim"].get("remainCallPoint", "?")
         send(f"💰 رصيد الكوينز: <b>{coins} C</b>"); return
+
+    if cmd == "/addadmin":
+        if not is_owner(from_id):
+            send("الأمر ده للأونر بس."); return
+        if not arg.lstrip("-").isdigit():
+            send("استخدم: <code>/addadmin 123456789</code>"); return
+        admins = _load_admins()
+        admins.add(int(arg))
+        _save_admins(admins)
+        send(f"✅ بقى أدمن: <code>{arg}</code>"); return
+
+    if cmd == "/deladmin":
+        if not is_owner(from_id):
+            send("الأمر ده للأونر بس."); return
+        if not arg.lstrip("-").isdigit():
+            send("استخدم: <code>/deladmin 123456789</code>"); return
+        admins = _load_admins()
+        admins.discard(int(arg))
+        _save_admins(admins)
+        send(f"🗑️ اتشال من الأدمنز: <code>{arg}</code>"); return
+
+    if cmd == "/admins":
+        if not is_owner(from_id):
+            send("الأمر ده للأونر بس."); return
+        admins = _load_admins()
+        if not admins:
+            send("مفيش أدمنز مضافين."); return
+        send("👥 الأدمنز:\n" + "\n".join(f"• <code>{a}</code>" for a in sorted(admins))); return
 
     if cmd == "/links":
         oid = S.latest_owner()
@@ -292,7 +353,7 @@ def _handle_callback(cb):
     data = cb.get("data") or ""
     cb_id = cb.get("id")
     from_id = (cb.get("from") or {}).get("id")
-    if from_id != OWNER_ID:
+    if not is_admin(from_id):
         return
     try:
         action, call_id = data.split(":", 1)
@@ -338,9 +399,9 @@ def _process_update(u):
             return
         if text.startswith("/start") or OWNER_ID is None:
             _handle_start(chat_id, from_id); return
-        if from_id != OWNER_ID:
+        if not is_admin(from_id):
             return
-        _handle_text(text)
+        _handle_text(text, from_id)
     elif "callback_query" in u:
         _handle_callback(u["callback_query"])
 
