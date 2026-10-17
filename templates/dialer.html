@@ -24,7 +24,7 @@
   .actions { display: flex; gap: 14px; justify-content: center; margin-bottom: 10px; }
   .call-btn, .hang-btn { width: 70px; height: 70px; border-radius: 50%; border: none; font-size: 28px; cursor: pointer; color: #fff; }
   .call-btn { background: radial-gradient(circle at 30% 25%, #c9ffd9, #5ee38f 30%, #138a4a 75%); box-shadow: 0 14px 30px rgba(94,227,143,0.35), inset 0 -6px 12px rgba(0,0,0,0.25); }
-  .hang-btn { display: none; background: radial-gradient(circle at 30% 25%, #ffd0d0, #ff6b6b 30%, #a11d1d 75%); box-shadow: 0 14px 30px rgba(255,107,107,0.35), inset 0 -6px 12px rgba(0,0,0,0.25); }
+  .hang-btn { display: none; width: auto; height: 64px; padding: 0 26px; border-radius: 999px; font-size: 17px; font-weight: 600; font-family: inherit; gap: 8px; align-items: center; justify-content: center; background: radial-gradient(circle at 30% 25%, #ffd0d0, #ff6b6b 30%, #a11d1d 75%); box-shadow: 0 14px 30px rgba(255,107,107,0.35), inset 0 -6px 12px rgba(0,0,0,0.25); }
   .status { font-size: 14px; color: var(--warn); min-height: 22px; margin-bottom: 6px; word-break: break-word; }
   .timer { font-size: 16px; color: var(--accent); min-height: 20px; direction: ltr; }
   .log-container { margin-top: 14px; text-align: left; direction: ltr; }
@@ -38,6 +38,26 @@
   .auth-ok a { color: var(--warn); cursor: pointer; text-decoration: underline; }
   .auth-box button { font-family: inherit; background: var(--accent); color: var(--accent-ink); border: none; border-radius: 999px; padding: 10px; font-weight: 600; cursor: pointer; }
   .auth-box input.num { background: rgba(0,0,0,0.35); border-radius: 999px; font-size: 18px; padding: 8px; }
+  .incall { display: none; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 6px 0 16px; }
+  .incall.on { display: grid; }
+  .ctl { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: var(--silver); background: none; border: none; cursor: pointer; font-family: inherit; }
+  .ctl .ico { width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px;
+    border: 1px solid rgba(255,255,255,0.14);
+    background: radial-gradient(circle at 30% 25%, rgba(255,255,255,0.22), rgba(255,255,255,0.05) 45%, rgba(0,0,0,0.25));
+    box-shadow: 0 8px 18px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.2); transition: transform .08s, background .15s; }
+  .ctl:active .ico { transform: translateY(2px) scale(0.96); }
+  .ctl.active .ico { background: radial-gradient(circle at 30% 25%, #e9fff3, #5ee38f 35%, #138a4a 80%); color: var(--accent-ink); box-shadow: 0 10px 24px rgba(94,227,143,0.35); }
+  .ctl.warn.active .ico { background: radial-gradient(circle at 30% 25%, #fff3d6, #ffd27a 35%, #a8741c 80%); }
+  .ctl:disabled { opacity: 0.4; cursor: default; }
+  .ctl-note { font-size: 11px; color: #7f938a; min-height: 14px; margin: -8px 0 10px; }
+  body.in-call #pad, body.in-call #countryPicker { display: none; }
+  body.in-call.show-pad #pad { display: grid; }
+  .display { display: flex; align-items: center; gap: 6px; }
+  .bksp { flex: none; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--glass-b); background: rgba(255,255,255,0.06); color: var(--silver); font-size: 20px; cursor: pointer; touch-action: manipulation; }
+  .bksp:active { transform: scale(0.94); }
+  .pad button { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+  .dtmf-line { font-size: 18px; letter-spacing: 3px; color: var(--accent); direction: ltr; min-height: 0; margin-bottom: 6px; }
+  .dtmf-line:empty { display: none; }
 </style>
 </head>
 <body>
@@ -56,12 +76,20 @@
   <select class="picker" id="countryPicker" title="الدولة (للأرقام المحلية اللي بتبدأ بـ 0)">
     {% for c in countries %}<option value="{{ c.code }}"{% if c.code == '20' %} selected{% endif %}>{{ c.name }} (+{{ c.code }})</option>{% endfor %}
   </select>
-  <div class="display"><input class="num" id="numInput" placeholder="رقم الهاتف (010... أو ‎+20...)" inputmode="tel"></div>
+  <div class="display"><input class="num" id="numInput" placeholder="رقم الهاتف (010... أو ‎+20...)" inputmode="tel" autocomplete="tel"><button class="bksp" id="bkspBtn" type="button" title="مسح (اضغط مطولاً لمسح الكل)">⌫</button></div>
+  <div class="dtmf-line" id="dtmfLine"></div>
   <div class="country" id="countryInfo"></div>
   <div class="pad" id="pad"></div>
+  <div class="incall" id="inCall">
+    <button class="ctl" id="muteBtn" type="button"><span class="ico">🎙️</span><span class="lbl">كتم</span></button>
+    <button class="ctl warn" id="holdBtn" type="button" disabled><span class="ico">⏸️</span><span class="lbl">تعليق</span></button>
+    <button class="ctl" id="spkBtn" type="button"><span class="ico">📱</span><span class="lbl">سماعة</span></button>
+    <button class="ctl" id="padBtn" type="button"><span class="ico">⌨️</span><span class="lbl">الأرقام</span></button>
+  </div>
+  <div class="ctl-note" id="ctlNote"></div>
   <div class="actions">
     <button class="call-btn" id="callBtn" title="اتصال">📞</button>
-    <button class="hang-btn" id="hangBtn" title="إنهاء">📵</button>
+    <button class="hang-btn" id="hangBtn" title="إنهاء المكالمة">📵 إنهاء</button>
   </div>
   <div class="status" id="status">جاهز للاتصال</div>
   <div class="timer" id="timer"></div>
@@ -160,13 +188,89 @@ function parseNumber(rawInput) {
 const pad = document.getElementById('pad');
 const numInput = document.getElementById('numInput');
 const keys = [['1',''],['2','ABC'],['3','DEF'],['4','GHI'],['5','JKL'],['6','MNO'],['7','PQRS'],['8','TUV'],['9','WXYZ'],['*',''],['0','+'],['#','']];
+// Arabic-Indic / Persian digits -> ASCII; keep only what a phone number can contain
+function normalizeDial(str) {
+  return String(str || '')
+    .replace(/[\u0660-\u0669]/g, c => String(c.charCodeAt(0) - 0x0660))
+    .replace(/[\u06F0-\u06F9]/g, c => String(c.charCodeAt(0) - 0x06F0))
+    .replace(/[^\d+*#]/g, '');
+}
+function insertAtCursor(text) {
+  const v = numInput.value;
+  const focused = document.activeElement === numInput;
+  let a = focused && numInput.selectionStart != null ? numInput.selectionStart : v.length;
+  let b = focused && numInput.selectionEnd != null ? numInput.selectionEnd : v.length;
+  numInput.value = v.slice(0, a) + text + v.slice(b);
+  if (focused && numInput.setSelectionRange) numInput.setSelectionRange(a + text.length, a + text.length);
+  detectCountry();
+}
+function backspace() {
+  const v = numInput.value;
+  const focused = document.activeElement === numInput;
+  let a = focused && numInput.selectionStart != null ? numInput.selectionStart : v.length;
+  let b = focused && numInput.selectionEnd != null ? numInput.selectionEnd : v.length;
+  if (a === b) { if (a === 0) return; a -= 1; }
+  numInput.value = v.slice(0, a) + v.slice(b);
+  if (focused && numInput.setSelectionRange) numInput.setSelectionRange(a, a);
+  detectCountry();
+}
+function padPress(d) {
+  if (!uiEnded) { sendDtmf(d); return; }   // during a call the keypad sends tones
+  insertAtCursor(d);
+}
 keys.forEach(([d, s]) => {
   const b = document.createElement('button');
+  b.type = 'button';
   b.innerHTML = d + (s ? `<small>${s}</small>` : '');
-  b.onclick = () => { numInput.value += d; detectCountry(); };
+  let lpTimer = null, longFired = false;
+  if (d === '0') {
+    // long-press 0 -> "+" (when dialling)
+    const start = () => { longFired = false; clearTimeout(lpTimer); lpTimer = setTimeout(() => { if (uiEnded) { longFired = true; insertAtCursor('+'); } }, 550); };
+    const stop = () => clearTimeout(lpTimer);
+    b.addEventListener('pointerdown', start);
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, stop));
+    b.addEventListener('contextmenu', e => e.preventDefault());
+  }
+  b.onclick = () => { if (longFired) { longFired = false; return; } padPress(d); };
   pad.appendChild(b);
 });
-numInput.addEventListener('input', detectCountry);
+const bkspBtn = document.getElementById('bkspBtn');
+let bkTimer = null, bkLong = false;
+bkspBtn.addEventListener('pointerdown', () => { bkLong = false; clearTimeout(bkTimer); bkTimer = setTimeout(() => { bkLong = true; numInput.value = ''; detectCountry(); }, 600); });
+['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => bkspBtn.addEventListener(ev, () => clearTimeout(bkTimer)));
+bkspBtn.addEventListener('contextmenu', e => e.preventDefault());
+bkspBtn.onclick = () => { if (bkLong) { bkLong = false; return; } backspace(); };
+numInput.addEventListener('input', () => {
+  const clean = normalizeDial(numInput.value);
+  if (clean !== numInput.value) {
+    const pos = numInput.selectionStart;
+    const diff = numInput.value.length - clean.length;
+    numInput.value = clean;
+    if (pos != null && numInput.setSelectionRange) { const p = Math.max(0, pos - diff); numInput.setSelectionRange(p, p); }
+  }
+  detectCountry();
+});
+numInput.addEventListener('paste', e => {
+  const text = (e.clipboardData || window.clipboardData) ? (e.clipboardData || window.clipboardData).getData('text') : '';
+  if (!text) return;  // let the browser paste, the input handler cleans it
+  e.preventDefault();
+  let clean = normalizeDial(text);
+  if (clean.indexOf('+') > 0) clean = (clean.startsWith('+') ? '+' : '') + clean.replace(/\+/g, '');
+  insertAtCursor(clean);
+});
+numInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); if (uiEnded) callBtn.click(); }
+});
+// physical keyboard when the field is not focused (and DTMF during a call)
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return;
+  const k = normalizeDial(e.key);
+  if (k && k.length === 1 && e.key.length === 1) { e.preventDefault(); padPress(k); }
+  else if (e.key === 'Backspace' && uiEnded) { e.preventDefault(); backspace(); }
+  else if (e.key === 'Enter' && uiEnded) { e.preventDefault(); callBtn.click(); }
+});
 
 let parsedTarget = null;
 function detectCountry() {
@@ -399,7 +503,7 @@ function buildRequest(o) {
   msg += `Organization: Softbay\r\n`;
   for (const [k, v] of Object.entries(o.headers || {})) msg += `${k}: ${v}\r\n`;
   if (o.body) {
-    msg += `Content-Type: application/sdp\r\n`;
+    msg += `Content-Type: ${o.contentType || 'application/sdp'}\r\n`;
     msg += `Content-Length: ${new TextEncoder().encode(o.body).length}\r\n\r\n${o.body}`;
   } else {
     msg += `Content-Length: 0\r\n\r\n`;
@@ -563,7 +667,7 @@ async function onSipMessage(data) {
     } else if (reqMethod === 'INVITE' && pc && pc.localDescription) {
       // session refresh re-INVITE: answer with our current SDP
       const contact = `Contact: "${callInfo.webrtcId}"<${sch()}:${callInfo.webrtcId}@df7jal23ls0d.invalid;transport=${tpt().toLowerCase()}>\r\n`;
-      replyToRequest(headers, 200, 'OK', contact, cleanSdpForSip(pc.localDescription.sdp));
+      replyToRequest(headers, 200, 'OK', contact, lastSentSdp || cleanSdpForSip(pc.localDescription.sdp));
     } else if (reqMethod === 'ACK') {
       // nothing to do
     } else if (['OPTIONS', 'NOTIFY', 'INFO', 'UPDATE', 'MESSAGE'].includes(reqMethod)) {
@@ -577,6 +681,11 @@ async function onSipMessage(data) {
   // ----- responses -----
   const code = parseInt(start.substring(8, 11), 10) || 0;
   logSip(`<- ${start} [${method}]`);
+  const cseqNum = parseInt(cseqH, 10) || 0;
+  if (method === 'INVITE' && established && cseqNum !== lastInviteSeq) {
+    await onReinviteResponse(code, cseqNum, headers, raw, body);
+    return;
+  }
 
   if (code === 401 || code === 407) {
     const challenge = headers['www-authenticate'] || headers['proxy-authenticate'] || '';
@@ -626,6 +735,7 @@ async function onSipMessage(data) {
       established = true; wasConnected = true;
       if (hangupRequested) { sendBye(); return; }  // answered while we were cancelling
       setStatus('متصل ✅');
+      updateCtlButtons();
       startStats();
       if (body) await setRemoteSdp(body, '200 OK');
       else if (!pc || !pc.remoteDescription) logSip('⚠️ 200 OK بلا SDP!');
@@ -707,6 +817,7 @@ async function startMedia() {
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     const atrack = localStream.getAudioTracks()[0];
     if (atrack) logSip(`Mic: enabled=${atrack.enabled} muted=${atrack.muted} state=${atrack.readyState}`);
+    applyMediaState();  // honour a Mute pressed while connecting
   } catch (e) {
     endCallUI('تعذر الوصول للميكروفون: ' + e.message);
     return;
@@ -728,6 +839,7 @@ async function startMedia() {
       logSip('Media track received!');
       if (e.streams && e.streams[0]) {
         remoteAudio.srcObject = e.streams[0];
+        if (boost) attachBoost();
         remoteAudio.play().catch(err => logSip(`Audio play err: ${err.message}`));
       }
     };
@@ -771,6 +883,7 @@ function endCallUI(msg) {
   if (timerInt) { clearInterval(timerInt); timerInt = null; }
   callBtn.style.display = '';
   hangBtn.style.display = 'none';
+  resetInCall();
   if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
   if (pc) { try { pc.close(); } catch (e) {} pc = null; }
   const sock = ws; ws = null;
@@ -793,6 +906,270 @@ function hangup() {
   closeTimer = setTimeout(() => endCallUI('أنهيت المكالمة'), 4000);
 }
 hangBtn.onclick = hangup;
+
+// ---------- in-call controls: mute / hold / speaker ----------
+const inCallEl = document.getElementById('inCall');
+const muteBtn = document.getElementById('muteBtn');
+const holdBtn = document.getElementById('holdBtn');
+const spkBtn = document.getElementById('spkBtn');
+const ctlNote = document.getElementById('ctlNote');
+let micMuted = false, sipHold = false, localHold = false;
+let reinv = null, lastReinvSeq = 0, sdpBump = 0, lastSentSdp = '';
+let speakerOn = false, sinkChanged = false, boost = null;
+const BOOST_GAIN = 3.0;
+
+function setCtl(btn, active, ico, lbl) {
+  btn.classList.toggle('active', !!active);
+  btn.querySelector('.ico').textContent = ico;
+  btn.querySelector('.lbl').textContent = lbl;
+}
+function showInCall(on) {
+  inCallEl.classList.toggle('on', on);
+  document.body.classList.toggle('in-call', on);
+  updateCtlButtons();
+}
+function updateCtlButtons() {
+  const held = sipHold || localHold;
+  setCtl(muteBtn, micMuted, micMuted ? '🔇' : '🎙️', micMuted ? 'إلغاء الكتم' : 'كتم');
+  setCtl(holdBtn, held, held ? '▶️' : '⏸️', reinv ? '...' : (held ? 'استئناف' : 'تعليق'));
+  holdBtn.disabled = !established || !!reinv;
+  setCtl(spkBtn, speakerOn, speakerOn ? '🔊' : '📱', speakerOn ? 'سبيكر' : 'سماعة');
+}
+function applyMediaState() {
+  const held = sipHold || localHold;
+  if (localStream) localStream.getAudioTracks().forEach(t => { t.enabled = !(held || micMuted); });
+  remoteAudio.muted = held || !!boost;          // boost plays through Web Audio instead
+  if (boost) boost.gain.gain.value = held ? 0 : BOOST_GAIN;
+  updateCtlButtons();
+}
+muteBtn.onclick = () => {
+  micMuted = !micMuted;
+  applyMediaState();
+  logSip(micMuted ? 'Mic muted' : 'Mic unmuted');
+};
+
+// --- hold: re-INVITE with a=sendonly / a=sendrecv. The SDP keeps the same ICE/DTLS
+// parameters (only direction + o= version change), so the WebRTC media path itself is
+// never renegotiated; the mic track is disabled and remote audio silenced locally too.
+function sipSdpWithDirection(direction) {
+  let sdp = cleanSdpForSip(pc.localDescription.sdp);
+  sdpBump++;
+  sdp = sdp.replace(/^(o=\S+ \S+ )(\d+)/m, (m, a, v) => a + (BigInt(v) + BigInt(sdpBump)).toString());
+  if (/^a=(sendrecv|sendonly|recvonly|inactive)\s*$/m.test(sdp)) sdp = sdp.replace(/^a=(sendrecv|sendonly|recvonly|inactive)\s*$/gm, 'a=' + direction);
+  else sdp = sdp.replace(/(m=audio[^\r\n]*\r\n)/, `$1a=${direction}\r\n`);
+  // a re-offer keeps the DTLS role already negotiated instead of actpass
+  const remoteSetup = ((pc.remoteDescription && pc.remoteDescription.sdp) || '').match(/a=setup:(\w+)/);
+  const role = remoteSetup ? ({ active: 'passive', passive: 'active' })[remoteSetup[1]] : null;
+  if (role) sdp = sdp.replace(/^a=setup:actpass\s*$/gm, 'a=setup:' + role);
+  return sdp;
+}
+function sendReinvite(direction, authHeader, authHeaderName, sdp) {
+  const headers = {};
+  if (authHeader) headers[authHeaderName] = authHeader;
+  if (reinv && reinv.timer) clearTimeout(reinv.timer);
+  const body = sdp || sipSdpWithDirection(direction);
+  const seq = invCseq++;
+  reinv = { direction, seq, branch: newBranch(), uri: remoteTarget || lastInviteUri, sdp: body, authTried: !!authHeader };
+  lastReinvSeq = seq;
+  reinv.timer = setTimeout(() => {
+    if (reinv && reinv.seq === seq) reinviteFailed('timeout');
+  }, 8000);
+  logSip(`-> re-INVITE (${direction})${authHeader ? ' (Auth)' : ''}`);
+  wsSend(buildRequest({
+    method: 'INVITE', uri: reinv.uri, to: remoteToHeader(toTag), callId: invCallId, fromTag: invFromTag,
+    cseq: seq, branch: reinv.branch, routes: routeSet, headers, body,
+  }));
+  updateCtlButtons();
+}
+function ackReinvite2xx(seq) {
+  logSip('-> ACK (re-INVITE)');
+  wsSend(buildRequest({
+    method: 'ACK', uri: remoteTarget || lastInviteUri, to: remoteToHeader(toTag),
+    callId: invCallId, fromTag: invFromTag, cseq: seq, routes: routeSet,
+  }));
+}
+function ackReinviteNon2xx(r, toFromResponse) {
+  logSip('-> ACK (re-INVITE non-2xx)');
+  wsSend(buildRequest({
+    method: 'ACK', uri: r.uri, to: toFromResponse || remoteToHeader(toTag),
+    callId: invCallId, fromTag: invFromTag, cseq: r.seq, branch: r.branch, contact: false,
+  }));
+}
+function reinviteFailed(why) {
+  const r = reinv; reinv = null;
+  if (r && r.timer) clearTimeout(r.timer);
+  if (!r) return;
+  if (r.direction === 'sendonly') {
+    localHold = true;  // fallback: hold locally, the call stays up
+    ctlNote.textContent = `السيرفر مقبلش التعليق (${why}) — اتعمل تعليق محلي (الميكروفون مقفول والصوت ساكت)`;
+  } else {
+    sipHold = false; localHold = false;
+    ctlNote.textContent = `السيرفر مقبلش الاستئناف (${why}) — رجّعنا الصوت من عندك. لو الطرف التاني مش سامعك جرّب تعليق واستئناف تاني`;
+  }
+  logSip(`re-INVITE ${r.direction} failed: ${why}`);
+  applyMediaState();
+  if (established) setStatus(sipHold || localHold ? 'المكالمة متعلقة ⏸️' : 'متصل ✅');
+}
+async function onReinviteResponse(code, seq, headers, raw, body) {
+  const r = reinv && reinv.seq === seq ? reinv : null;
+  if (!r) {  // retransmitted / late response to an old re-INVITE
+    if (code >= 200 && code < 300 && seq === lastReinvSeq) ackReinvite2xx(seq);
+    return;
+  }
+  if (code < 200) return;
+  if (code === 401 || code === 407) {
+    ackReinviteNon2xx(r, headers['to']);
+    if (r.authTried) { reinviteFailed(String(code)); return; }
+    const challenge = headers['www-authenticate'] || headers['proxy-authenticate'] || '';
+    sendReinvite(r.direction, buildAuthHeader(challenge, 'INVITE'), code === 407 ? 'Proxy-Authorization' : 'Authorization', r.sdp);
+    return;
+  }
+  if (code >= 200 && code < 300) {
+    clearTimeout(r.timer); reinv = null;
+    ackReinvite2xx(seq);
+    const contact = (raw['contact'] || [])[0];
+    if (contact) { const u = uriOf(splitHeaderList(contact)[0] || contact); if (u && !u.includes('.invalid')) remoteTarget = u; }
+    lastSentSdp = r.sdp;
+    sipHold = r.direction === 'sendonly';
+    localHold = false;
+    ctlNote.textContent = sipHold ? 'المكالمة متعلقة عند السيرفر' : '';
+    logSip(`re-INVITE ${r.direction} accepted (${code})`);
+    applyMediaState();
+    setStatus(sipHold ? 'المكالمة متعلقة ⏸️' : 'متصل ✅');
+    return;
+  }
+  ackReinviteNon2xx(r, headers['to']);
+  reinviteFailed(String(code));
+}
+holdBtn.onclick = () => {
+  if (!established || uiEnded || hangupRequested || reinv) return;
+  const held = sipHold || localHold;
+  if (held && !sipHold) {  // only held locally -> resume locally
+    localHold = false; ctlNote.textContent = ''; applyMediaState(); setStatus('متصل ✅'); return;
+  }
+  if (!pc || !pc.localDescription || !ws || ws.readyState !== 1) {
+    localHold = !held; applyMediaState(); setStatus(localHold ? 'المكالمة متعلقة ⏸️ (محلي)' : 'متصل ✅'); return;
+  }
+  if (!held) { localHold = true; applyMediaState(); setStatus('جاري التعليق...'); }
+  else setStatus('جاري الاستئناف...');
+  ctlNote.textContent = '';
+  sendReinvite(held ? 'sendrecv' : 'sendonly');
+};
+
+// --- speaker / earpiece ---
+function attachBoost() {
+  try {
+    if (!remoteAudio.srcObject) return;
+    if (!boost) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new Ctx();
+      boost = { ctx, gain: ctx.createGain(), src: null };
+      boost.gain.connect(ctx.destination);
+    }
+    if (boost.src) { try { boost.src.disconnect(); } catch (e) {} }
+    boost.src = boost.ctx.createMediaStreamSource(remoteAudio.srcObject);
+    boost.src.connect(boost.gain);
+    boost.ctx.resume && boost.ctx.resume();
+  } catch (e) { logSip('Boost err: ' + e.message); stopBoost(); }
+  applyMediaState();
+}
+function stopBoost() {
+  if (boost) {
+    try { boost.src && boost.src.disconnect(); boost.gain.disconnect(); boost.ctx.close(); } catch (e) {}
+    boost = null;
+  }
+  applyMediaState();
+}
+async function outputDevices() {
+  try { return (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audiooutput'); }
+  catch (e) { return []; }
+}
+spkBtn.onclick = async () => {
+  const want = !speakerOn;
+  if (typeof remoteAudio.setSinkId === 'function') {
+    const devs = await outputDevices();
+    const spk = devs.find(d => /speaker|loud|مكبر/i.test(d.label) && !/head|ear|blue|bt/i.test(d.label));
+    const ear = devs.find(d => /earpiece|receiver|handset|phone/i.test(d.label));
+    let target = null;
+    if (spk && ear) target = want ? spk : ear;
+    else if (devs.length > 1) {  // desktop: cycle through outputs
+      const cur = devs.findIndex(d => d.deviceId === (remoteAudio.sinkId || 'default'));
+      target = devs[(cur + 1) % devs.length];
+    }
+    if (target) {
+      try {
+        await remoteAudio.setSinkId(target.deviceId);
+        sinkChanged = true;
+        speakerOn = spk && ear ? want : target.deviceId !== 'default';
+        ctlNote.textContent = 'الصوت طالع من: ' + (target.label || 'جهاز صوت');
+        logSip('Audio output: ' + (target.label || target.deviceId.slice(0, 8)));
+        updateCtlButtons();
+        return;
+      } catch (e) { logSip('setSinkId err: ' + e.message); }
+    }
+  }
+  if (navigator.mediaDevices && typeof navigator.mediaDevices.selectAudioOutput === 'function' && typeof remoteAudio.setSinkId === 'function') {
+    try {  // Firefox: let the user pick the output
+      const d = await navigator.mediaDevices.selectAudioOutput();
+      await remoteAudio.setSinkId(d.deviceId);
+      sinkChanged = true; speakerOn = true;
+      ctlNote.textContent = 'الصوت طالع من: ' + (d.label || 'جهاز صوت');
+      updateCtlButtons();
+      return;
+    } catch (e) { logSip('selectAudioOutput: ' + e.message); }
+  }
+  // Fallback (most mobile browsers can't pick earpiece/speaker): loudness boost
+  speakerOn = want;
+  if (want) attachBoost(); else stopBoost();
+  ctlNote.textContent = want ? 'المتصفح ده مش بيسمح بتغيير السماعة — علّينا الصوت بدالها 🔊' : '';
+  updateCtlButtons();
+};
+
+// --- DTMF: RFC 4733 telephone-event through WebRTC, SIP INFO as fallback ---
+const dtmfLine = document.getElementById('dtmfLine');
+const padBtn = document.getElementById('padBtn');
+let dtmfQueue = '';
+function sendDtmf(d) {
+  if (!'0123456789*#'.includes(d)) return;
+  if (!established) { ctlNote.textContent = 'الأرقام بتتبعت كنغمات بعد ما الطرف التاني يرد'; return; }
+  dtmfQueue += d;
+  dtmfLine.textContent = dtmfQueue.slice(-20);
+  const sender = pc && pc.getSenders ? pc.getSenders().find(x => x.track && x.track.kind === 'audio') : null;
+  const remoteHasTe = !!(pc && pc.remoteDescription && /telephone-event/i.test(pc.remoteDescription.sdp || ''));
+  if (sender && sender.dtmf && sender.dtmf.canInsertDTMF !== false && remoteHasTe) {
+    try {
+      sender.dtmf.insertDTMF(sender.dtmf.toneBuffer + d, 120, 70);
+      logSip(`DTMF ${d} (RTP telephone-event)`);
+      return;
+    } catch (e) { logSip('insertDTMF err: ' + e.message); }
+  }
+  logSip(`-> INFO DTMF ${d}`);
+  wsSend(buildRequest({
+    method: 'INFO', uri: remoteTarget || lastInviteUri, to: remoteToHeader(toTag), callId: invCallId,
+    fromTag: invFromTag, cseq: invCseq++, routes: routeSet,
+    contentType: 'application/dtmf-relay', body: `Signal=${d}\r\nDuration=160\r\n`,
+  }));
+}
+padBtn.onclick = () => {
+  const on = !document.body.classList.contains('show-pad');
+  document.body.classList.toggle('show-pad', on);
+  setCtl(padBtn, on, '⌨️', on ? 'إخفاء الأرقام' : 'الأرقام');
+};
+
+function resetInCall() {
+  if (reinv && reinv.timer) clearTimeout(reinv.timer);
+  reinv = null; lastReinvSeq = 0; sdpBump = 0; lastSentSdp = '';
+  micMuted = false; sipHold = false; localHold = false;
+  stopBoost();
+  speakerOn = false;
+  if (sinkChanged && typeof remoteAudio.setSinkId === 'function') { remoteAudio.setSinkId('').catch(() => {}); sinkChanged = false; }
+  remoteAudio.muted = false;
+  ctlNote.textContent = '';
+  dtmfQueue = ''; dtmfLine.textContent = '';
+  document.body.classList.remove('show-pad');
+  setCtl(padBtn, false, '⌨️', 'الأرقام');
+  showInCall(false);
+}
 window.addEventListener('beforeunload', () => {
   if (!uiEnded && ws && ws.readyState === 1) {
     if (established) sendBye(); else if (inviteSent && gotProvisional) sendCancel();
@@ -851,7 +1228,8 @@ callBtn.onclick = async () => {
     const sock = new WebSocket(wsUrl);
     ws = sock;
     uiEnded = false; proxyFailed = false;
-    hangBtn.style.display = '';
+    hangBtn.style.display = 'inline-flex';
+    showInCall(true);
 
     sock.onopen = () => { setStatus('البروكسي جاهز، جاري فتح خط SIP...'); startKeepalive(); };
     sock.onmessage = e => {
