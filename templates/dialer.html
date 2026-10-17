@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>الدايلر — مكالمة حقيقية</title>
+<title>Dialer — Real Call</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='plasma.css') }}">
 <meta name="theme-color" content="#062016">
 <style>
@@ -22,11 +22,6 @@
   .pad button:active { transform: translateY(2px) scale(0.96); background: radial-gradient(circle at 30% 25%, rgba(94,227,143,0.5), rgba(19,92,59,0.4) 60%); }
   .pad button small { display: block; font-size: 9px; color: var(--silver-blue); letter-spacing: .08em; }
   .actions { display: flex; gap: 14px; justify-content: center; align-items: center; margin-bottom: 10px; }
-  .redial-btn { position: relative; width: 52px; height: 52px; border-radius: 50%; font-size: 20px; cursor: pointer; color: #fff;
-    border: 1px solid rgba(255,255,255,0.14); background: radial-gradient(circle at 30% 25%, rgba(255,255,255,0.22), rgba(255,255,255,0.05) 45%, rgba(0,0,0,0.25));
-    box-shadow: 0 8px 18px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.2); }
-  .redial-btn small { position: absolute; top: 56px; left: 50%; transform: translateX(-50%); font-size: 10px; color: var(--silver-blue); white-space: nowrap; direction: ltr; }
-  body.in-call .redial-btn { display: none !important; }
   input.num::placeholder { font-size: 16px; letter-spacing: 0; }
   .minutes { font-size: 13px; color: var(--silver); margin: -6px 0 12px; min-height: 18px; }
   .call-btn, .hang-btn { width: 70px; height: 70px; border-radius: 50%; border: none; font-size: 28px; cursor: pointer; color: #fff; }
@@ -79,58 +74,57 @@
 {% include "_scene.html" %}
 <div class="card">
   <div class="brand"><i></i> Easy Calls</div>
-  <h1>الدايلر</h1>
-  {% if shared %}<div style="font-size:12px;color:#4fc3f7;margin-bottom:6px;">🔗 {{ user.name }} — صالح لحد <span id="linkExp" data-t="{{ link_expires_at }}"></span></div>{% endif %}
+  <h1>Dialer</h1>
+  {% if shared %}<div style="font-size:12px;color:#4fc3f7;margin-bottom:6px;">🔗 {{ user.name }} — Valid until <span id="linkExp" data-t="{{ link_expires_at }}"></span></div>{% endif %}
   <div class="pcard-wrap"><div class="pcard">
     <div class="logo"></div>
     <div class="label">EASY COINS</div>
     <div class="amount"><span id="balance">{{ balance }}</span> <small>C</small></div>
-    <div class="hint">المكالمات بتتخصم من الكوينز (C)</div>
-    <div class="chip-row"><button class="chip" id="refreshBtn" type="button" title="تحديث الرصيد">🔄 تحديث</button></div>
+    <div class="hint">Calls are deducted from coins (C)</div>
+    <div class="chip-row"><button class="chip" id="refreshBtn" type="button" title="Refresh Balance">🔄 Refresh</button></div>
   </div></div>
-  <div class="rec-banner" id="recBanner">🔴 المكالمة بتتسجل</div>
+  <div class="rec-banner" id="recBanner">🔴 Call is being recorded</div>
   {% if not shared %}
   <div class="rec-toggle" id="recToggleRow"{% if not telegram_ready %} style="opacity:0.55"{% endif %}>
-    <span>🎙️ تسجيل المكالمات وإرسالها على تيليجرام{% if not telegram_ready %} <small>(البوت مش مفعّل)</small>{% endif %}</span>
-    <button type="button" class="chip" id="recToggle" data-on="{{ '1' if recording else '0' }}">{{ 'تشغيل ✅' if recording else 'إيقاف' }}</button>
+    <span>🎙️ Record calls and send to Telegram{% if not telegram_ready %} <small>(Bot not enabled)</small>{% endif %}</span>
+    <button type="button" class="chip" id="recToggle" data-on="{{ '1' if recording else '0' }}">{{ 'On ✅' if recording else 'Off' }}</button>
   </div>
   {% endif %}
-  <select class="picker" id="countryPicker" title="الدولة (للأرقام المحلية اللي بتبدأ بـ 0)">
+  <select class="picker" id="countryPicker" title="Country (for local numbers starting with 0)">
     {% for c in countries %}<option value="{{ c.code }}"{% if c.code == '20' %} selected{% endif %}>{{ c.name }} (+{{ c.code }})</option>{% endfor %}
   </select>
-  <div class="display"><input class="num" id="numInput" placeholder="رقم الهاتف (010... أو ‎+20...)" inputmode="tel" autocomplete="tel"><button class="bksp" id="bkspBtn" type="button" title="مسح (اضغط مطولاً لمسح الكل)">⌫</button></div>
+  <div class="display"><input class="num" id="numInput" placeholder="Phone number (010... or ‎+20...)" inputmode="tel" autocomplete="tel"><button class="bksp" id="bkspBtn" type="button" title="Clear (long-press to clear all)">⌫</button></div>
   <div class="dtmf-line" id="dtmfLine"></div>
   <div class="country" id="countryInfo"></div>
   <div class="minutes" id="minutesInfo"></div>
   <div class="pad" id="pad"></div>
   <div class="incall" id="inCall">
-    <button class="ctl" id="muteBtn" type="button"><span class="ico">🎙️</span><span class="lbl">كتم</span></button>
-    <button class="ctl warn" id="holdBtn" type="button" disabled><span class="ico">⏸️</span><span class="lbl">تعليق</span></button>
-    <button class="ctl" id="spkBtn" type="button"><span class="ico">📱</span><span class="lbl">سماعة</span></button>
-    <button class="ctl" id="padBtn" type="button"><span class="ico">⌨️</span><span class="lbl">الأرقام</span></button>
+    <button class="ctl" id="muteBtn" type="button"><span class="ico">🎙️</span><span class="lbl">Mute</span></button>
+    <button class="ctl warn" id="holdBtn" type="button" disabled><span class="ico">⏸️</span><span class="lbl">Hold</span></button>
+    <button class="ctl" id="spkBtn" type="button"><span class="ico">📱</span><span class="lbl">Speaker</span></button>
+    <button class="ctl" id="padBtn" type="button"><span class="ico">⌨️</span><span class="lbl">Keypad</span></button>
   </div>
   <div class="ctl-note" id="ctlNote"></div>
   <div class="actions">
-    <button class="redial-btn" id="redialBtn" type="button" title="إعادة الاتصال بآخر رقم" style="display:none;">🔁<small id="redialNum"></small></button>
-    <button class="call-btn" id="callBtn" title="اتصال">📞</button>
-    <button class="hang-btn" id="hangBtn" title="إنهاء المكالمة">📵 إنهاء</button>
+    <button class="call-btn" id="callBtn" title="Call">📞</button>
+    <button class="hang-btn" id="hangBtn" title="End Call">📵 End</button>
   </div>
-  <div class="status" id="status">جاهز للاتصال</div>
+  <div class="status" id="status">Ready forCall</div>
   <div class="timer" id="timer"></div>
   {% if shared %}
   {% else %}
-  <div class="auth-ok" id="authOk" style="{% if not phone_authenticated %}display:none;{% endif %}">✅ رقمك متوثق — <a onclick="showAuthBox()">توثيق رقم تاني</a></div>
+  <div class="auth-ok" id="authOk" style="{% if not phone_authenticated %}display:none;{% endif %}">✅ Your number is verified — <a onclick="showAuthBox()">Verify another number</a></div>
   <div class="auth-box" id="authBox" style="margin:10px 0; padding:12px; border:1px dashed #ffb74d; border-radius:10px;{% if phone_authenticated %} display:none;{% endif %}">
-    <div style="font-size:14px; margin-bottom:8px;">📱 توثيق رقم الموبايل <b>إجباري</b> قبل المكالمات (كود واتساب)</div>
-    <div style="font-size:12px; color:#ffb74d; margin-bottom:8px;">⚠️ ده لازم يكون <b>رقمك انت</b> (صاحب الحساب) — مش الرقم اللي هتتصل بيه. الأرقام اللي بتبدأ بـ 0 بتتحسب على الدولة المختارة فوق.</div>
+    <div style="font-size:14px; margin-bottom:8px;">📱 Phone number verification <b>required</b> before calls (WhatsApp code)</div>
+    <div style="font-size:12px; color:#ffb74d; margin-bottom:8px;">⚠️ This must be <b>your own number</b> (the account owner) — not the number you will call. Keypad starting with 0 counted on the selected country above.</div>
     <div id="authStep1">
-      <input class="num" id="authPhone" placeholder="مثال: 01044555099 أو ‎+201044555099" inputmode="tel" style="width:100%; margin-bottom:8px;">
-      <button onclick="requestAuthCode()" style="width:100%;">ابعت كود الواتساب 📩</button>
+      <input class="num" id="authPhone" placeholder="e.g.: 01044555099 or ‎+201044555099" inputmode="tel" style="width:100%; margin-bottom:8px;">
+      <button onclick="requestAuthCode()" style="width:100%;">Send WhatsApp code 📩</button>
     </div>
     <div id="authStep2" style="display:none;">
-      <div style="font-size:13px; margin-bottom:8px;">دخل الكود اللي وصلك واتساب:</div>
-      <input class="num" id="authCode" placeholder="كود التوثيق" inputmode="numeric" style="width:100%; margin-bottom:8px;">
-      <button onclick="submitAuthCode()" style="width:100%;">توثيق ✅</button>
+      <div style="font-size:13px; margin-bottom:8px;">Enter the code you received on WhatsApp:</div>
+      <input class="num" id="authCode" placeholder="Verification code" inputmode="numeric" style="width:100%; margin-bottom:8px;">
+      <button onclick="submitAuthCode()" style="width:100%;">Verify ✅</button>
     </div>
     <div id="authMsg" style="font-size:13px; margin-top:8px;"></div>
   </div>
@@ -139,17 +133,17 @@
     <div class="log-header">
       <span>📋 SIP Activity Log</span>
       <span>
-        <button onclick="navigator.clipboard && navigator.clipboard.writeText(document.getElementById('sipLog').textContent)">نسخ</button>
-        <button onclick="document.getElementById('sipLog').textContent='SIP Log cleared...'">مسح</button>
+        <button onclick="navigator.clipboard && navigator.clipboard.writeText(document.getElementById('sipLog').textContent)">Copy</button>
+        <button onclick="document.getElementById('sipLog').textContent='SIP Log cleared...'">Clear</button>
       </span>
     </div>
-    <div class="sip-log" id="sipLog">SIP Log: جاهز...</div>
+    <div class="sip-log" id="sipLog">SIP Log: Ready...</div>
   </div>
   {% if shared %}
-  <a class="back" href="/logout">خروج من الرابط</a>
+  <a class="back" href="/logout">Exit link</a>
   {% else %}
   {% include "_share_links.html" %}
-  <a class="back" href="/">← رجوع</a>
+  <a class="back" href="/">← Back</a>
   {% endif %}
 </div>
 <audio id="remoteAudio" autoplay playsinline></audio>
@@ -303,7 +297,7 @@ function detectCountry() {
   if (!parsedTarget) { el.textContent = ''; return; }
   const c = COUNTRY_BY_CODE[parsedTarget.cc];
   el.textContent = c
-    ? `${c.name} (+${parsedTarget.cc}) — ${c.rate} عملة/دقيقة${parsedTarget.local ? ' • رقم محلي' : ''}`
+    ? `${c.name} (+${parsedTarget.cc}) — ${c.rate} coins/min${parsedTarget.local ? ' • local number' : ''}`
     : `+${parsedTarget.cc}`;
 }
 // how many minutes the coins cover for the selected / detected country
@@ -314,7 +308,7 @@ function updateMinutes() {
   const coins = parseFloat(String(document.getElementById('balance').textContent).replace(/[^\d.\-]/g, ''));
   if (!c || !c.rate || isNaN(coins)) { out.textContent = ''; return; }
   const mins = Math.floor(coins / c.rate);
-  out.textContent = mins >= 1 ? `⏱️ رصيدك يكفي ~${mins} دقيقة لـ ${c.name}` : `⚠️ رصيدك مش كفاية لدقيقة واحدة لـ ${c.name} (${c.rate} C/دقيقة)`;
+  out.textContent = mins >= 1 ? `⏱️ Your balance covers ~${mins} min for ${c.name}` : `⚠️ Your balance is not enough for one minute to ${c.name} (${c.rate} C/min)`;
 }
 detectCountry();
 
@@ -363,8 +357,8 @@ function showAuthBox() {
 async function requestAuthCode() {
   const msg = document.getElementById('authMsg');
   const parsed = parseNumber(document.getElementById('authPhone').value);
-  if (!parsed || !parsed.national) { msg.textContent = 'دخل رقم الموبايل الأول'; return; }
-  msg.textContent = `بيبعت الكود واتساب لـ +${parsed.cc} ${parsed.national} ... ⏳`;
+  if (!parsed || !parsed.national) { msg.textContent = 'Enter your phone number first'; return; }
+  msg.textContent = `Sending WhatsApp code to +${parsed.cc} ${parsed.national} ... ⏳`;
   try {
     const r = await fetch('/api/phone-auth/req', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -378,18 +372,18 @@ async function requestAuthCode() {
       st2.style.display = 'block';
       st2.dataset.cc = parsed.cc;
       st2.dataset.national = parsed.national;
-      msg.textContent = 'الكود اتبعت واتساب ✅ دخله هنا';
+      msg.textContent = 'Code sent on WhatsApp ✅ enter it here';
     } else {
-      msg.textContent = 'فشل: ' + (j.message || j.error || j.raw || j.retCode || '؟');
+      msg.textContent = 'Failed: ' + (j.message || j.error || j.raw || j.retCode || '?');
     }
-  } catch (e) { msg.textContent = 'خطأ: ' + e; }
+  } catch (e) { msg.textContent = 'Error: ' + e; }
 }
 async function submitAuthCode() {
   const code = document.getElementById('authCode').value.replace(/\D/g, '');
   const msg = document.getElementById('authMsg');
   const st2 = document.getElementById('authStep2');
-  if (!code) { msg.textContent = 'دخل الكود'; return; }
-  msg.textContent = 'بيتحقق... ⏳';
+  if (!code) { msg.textContent = 'Enter the code'; return; }
+  msg.textContent = 'Verifying... ⏳';
   try {
     const r = await fetch('/api/phone-auth/res', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -402,9 +396,9 @@ async function submitAuthCode() {
       document.getElementById('authOk').style.display = '';
       msg.textContent = '';
     } else {
-      msg.textContent = 'الكود غلط أو فشل: ' + (j.message || j.error || j.raw || j.retCode || '؟');
+      msg.textContent = 'Wrong code or Failed: ' + (j.message || j.error || j.raw || j.retCode || '?');
     }
-  } catch (e) { msg.textContent = 'خطأ: ' + e; }
+  } catch (e) { msg.textContent = 'Error: ' + e; }
 }
 
 function md5(str) {
@@ -466,15 +460,15 @@ let timerInt = null, callStart = 0, closeTimer = null, keepaliveInt = null, stat
 let pendingSdp = null, proxyFailed = false, uiEnded = true, wasConnected = false;
 
 const PROXY_ERRORS = {
-  'no-login-session': 'الجلسة انتهت — اعمل خروج ودخول تاني',
-  'missing-host-port': 'بيانات سيرفر المكالمة ناقصة (host/port)',
-  'backend-connect-failed': 'البروكسي مش قادر يوصل للسيرفر',
-  'backend-tls-failed': 'البروكسي مش قادر يفتح اتصال آمن (WSS) بالسيرفر',
-  'proxy-crashed': 'البروكسي وقع',
+  'no-login-session': 'Session expired — log out and log back in',
+  'missing-host-port': 'Call server data missing (host/port)',
+  'backend-connect-failed': 'Proxy cannot reach the server',
+  'backend-tls-failed': 'Proxy cannot open Call secure (WSS) with the server',
+  'proxy-crashed': 'Proxy failed',
 };
 function proxyErrorText(reason) {
   const key = reason.split(':')[0];
-  const base = PROXY_ERRORS[key] || ('خطأ في البروكسي: ' + reason);
+  const base = PROXY_ERRORS[key] || ('Proxy error: ' + reason);
   return base + (key === 'no-login-session' || key === 'missing-host-port' ? '' : ' (' + reason + ')');
 }
 
@@ -699,7 +693,7 @@ async function onSipMessage(data) {
     if (reqMethod === 'BYE') {
       replyToRequest(headers, 200, 'OK');
       established = false;
-      endCallUI('الطرف الآخر أنهى المكالمة');
+      endCallUI('The other party ended the call');
     } else if (reqMethod === 'INVITE' && pc && pc.localDescription) {
       // session refresh re-INVITE: answer with our current SDP
       const contact = `Contact: "${callInfo.webrtcId}"<${sch()}:${callInfo.webrtcId}@df7jal23ls0d.invalid;transport=${tpt().toLowerCase()}>\r\n`;
@@ -728,13 +722,13 @@ async function onSipMessage(data) {
     const authName = code === 407 ? 'Proxy-Authorization' : 'Authorization';
     const auth = buildAuthHeader(challenge, method);
     if (method === 'REGISTER') {
-      setStatus('توثيق الدخول (REGISTER)...');
+      setStatus('Verify Login (REGISTER)...');
       sendRegister(auth);
     } else if (method === 'INVITE') {
       sendAckNon2xx(headers['to']);
-      if (hangupRequested) { endCallUI('أنهيت المكالمة'); return; }
+      if (hangupRequested) { endCallUI('You ended the call'); return; }
       if (pendingSdp) {
-        setStatus('توثيق المكالمة (INVITE Auth)...');
+        setStatus('Verify Call (INVITE Auth)...');
         sendInvite(pendingSdp, auth, authName);
       }
     } else if (method === 'BYE' && !byeAuthTried) {
@@ -746,9 +740,9 @@ async function onSipMessage(data) {
 
   if (code >= 100 && code < 200) {
     if (method !== 'INVITE') return;
-    if (code === 100) { setStatus('جاري فتح الخط (100 Trying)...'); return; }
+    if (code === 100) { setStatus('Opening line (100 Trying)...'); return; }
     gotProvisional = true;
-    setStatus('بيرن... 📲');
+    setStatus('Ringing... 📲');
     logSip(`<!> FULL ${code} response:\n` + data.slice(0, 2500));
     const t = tagOf(headers['to']); if (t) toTag = t;
     await setRemoteSdp(body, String(code));
@@ -760,7 +754,7 @@ async function onSipMessage(data) {
     if (method === 'REGISTER') {
       if (!registered) {
         registered = true;
-        setStatus('تم التسجيل ✅ تجهيز الصوت...');
+        setStatus('Registered ✅ Setting up audio...');
         await startMedia();
       }
     } else if (method === 'INVITE') {
@@ -770,14 +764,14 @@ async function onSipMessage(data) {
       if (established) return;  // retransmitted 200 OK
       established = true; wasConnected = true;
       if (hangupRequested) { sendBye(); return; }  // answered while we were cancelling
-      setStatus('متصل ✅');
+      setStatus('Connected ✅');
       updateCtlButtons();
       startStats();
       callConnectedAt = Date.now();
       ctrlSend({ type: 'connected' });
       startRecording();
       if (body) await setRemoteSdp(body, '200 OK');
-      else if (!pc || !pc.remoteDescription) logSip('⚠️ 200 OK بلا SDP!');
+      else if (!pc || !pc.remoteDescription) logSip('⚠️ 200 OK without SDP!');
       if (!timerInt) {
         callStart = Date.now();
         timerInt = setInterval(() => {
@@ -786,9 +780,9 @@ async function onSipMessage(data) {
         }, 1000);
       }
     } else if (method === 'BYE') {
-      endCallUI('انتهت المكالمة');
+      endCallUI('Call ended');
     } else if (method === 'CANCEL') {
-      setStatus('جاري الإلغاء...');  // the INVITE will now get 487
+      setStatus('Cancelling...');  // the INVITE will now get 487
     }
     return;
   }
@@ -797,12 +791,12 @@ async function onSipMessage(data) {
     logSip(`<!> FULL ${code} response:\n` + data.slice(0, 1800));
     if (method === 'INVITE') {
       sendAckNon2xx(headers['to']);
-      if (code === 487 || hangupRequested) endCallUI('اتلغت المكالمة');
-      else endCallUI(`رفض من السيرفر (${code} عند INVITE)`);
+      if (code === 487 || hangupRequested) endCallUI('Cancelled Call');
+      else endCallUI(`Rejected by server (${code} at INVITE)`);
     } else if (method === 'REGISTER') {
-      endCallUI(`رفض من السيرفر (${code} عند REGISTER)`);
+      endCallUI(`Rejected by server (${code} at REGISTER)`);
     } else if ((method === 'BYE' || method === 'CANCEL') && hangupRequested) {
-      endCallUI('أنهيت المكالمة');
+      endCallUI('You ended the call');
     }
     // errors to any other request (e.g. OPTIONS) must NOT end the call
   }
@@ -852,18 +846,18 @@ function stopKeepalive() {
 
 async function startMedia() {
   try {
-    setStatus('طلب إذن الميكروفون...');
+    setStatus('Requesting microphone permission...');
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     const atrack = localStream.getAudioTracks()[0];
     if (atrack) logSip(`Mic: enabled=${atrack.enabled} muted=${atrack.muted} state=${atrack.readyState}`);
     applyMediaState();  // honour a Mute pressed while connecting
   } catch (e) {
-    endCallUI('تعذر الوصول للميكروفون: ' + e.message);
+    endCallUI('Cannot access microphone: ' + e.message);
     return;
   }
-  if (hangupRequested) { endCallUI('أنهيت المكالمة'); return; }
+  if (hangupRequested) { endCallUI('You ended the call'); return; }
   try {
-    setStatus('تجهيز قناة الصوت (WebRTC)...');
+    setStatus('Setting up audio channel (WebRTC)...');
     const iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
     if (callInfo.stunAddr) {
       const stunClean = callInfo.stunAddr.replace(/^stun:/i, '').trim();
@@ -895,7 +889,7 @@ async function startMedia() {
     const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
     await pc.setLocalDescription(offer);
 
-    setStatus('تجميع مسارات الصوت (ICE)...');
+    setStatus('Gathering audio routes (ICE)...');
     await new Promise(res => {
       const t0 = Date.now();
       const check = () => {
@@ -904,19 +898,19 @@ async function startMedia() {
       };
       check();
     });
-    if (!pc || !pc.localDescription || hangupRequested) { if (hangupRequested) endCallUI('أنهيت المكالمة'); return; }
+    if (!pc || !pc.localDescription || hangupRequested) { if (hangupRequested) endCallUI('You ended the call'); return; }
     pendingSdp = cleanSdpForSip(pc.localDescription.sdp);
-    setStatus('تم إرسال طلب الرن (INVITE)...');
+    setStatus('Ring request sent (INVITE)...');
     sendInvite(pendingSdp, null);
   } catch (err) {
-    endCallUI('خطأ في تجهيز الصوت: ' + err.message);
+    endCallUI('Error in Setting up audio: ' + err.message);
   }
 }
 
 function endCallUI(msg) {
   if (uiEnded) { if (msg) setStatus(msg); return; }
   uiEnded = true;
-  setStatus(msg || 'انتهت المكالمة');
+  setStatus(msg || 'Call ended');
   stopKeepalive();
   if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
   if (timerInt) { clearInterval(timerInt); timerInt = null; }
@@ -944,14 +938,14 @@ function hangup() {
   if (uiEnded) return;
   hangupRequested = true;
   hangBtn.style.display = 'none';
-  setStatus('جاري إنهاء المكالمة...');
-  if (!ws || ws.readyState !== 1) { endCallUI('أنهيت المكالمة'); return; }
+  setStatus('In progress End Call...');
+  if (!ws || ws.readyState !== 1) { endCallUI('You ended the call'); return; }
   if (established) sendBye();
   else if (inviteSent && gotProvisional) sendCancel();
   else if (inviteSent) logSip('Waiting for 1xx before CANCEL...');  // CANCEL goes out when 1xx arrives
-  else { endCallUI('أنهيت المكالمة'); return; }
+  else { endCallUI('You ended the call'); return; }
   // Wait for the server to confirm (200 to BYE / 487 to INVITE) before closing the socket
-  closeTimer = setTimeout(() => endCallUI('أنهيت المكالمة'), 4000);
+  closeTimer = setTimeout(() => endCallUI('You ended the call'), 4000);
 }
 hangBtn.onclick = hangup;
 
@@ -965,7 +959,7 @@ let callConnectedAt = 0, callRate = 0, callDialled = null;
   const btn = document.getElementById('recToggle');
   if (!btn) return;
   btn.onclick = async () => {
-    if (!TG_READY) { alert('فعّل بوت تيليجرام الأول (TELEGRAM_BOT_TOKEN + TELEGRAM_OWNER_ID على Railway)'); return; }
+    if (!TG_READY) { alert('Enable the Telegram botorto (TELEGRAM_BOT_TOKEN + TELEGRAM_OWNER_ID on Railway)'); return; }
     const on = btn.dataset.on !== '1';
     btn.disabled = true;
     try {
@@ -974,9 +968,9 @@ let callConnectedAt = 0, callRate = 0, callDialled = null;
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || r.status);
       btn.dataset.on = j.on ? '1' : '0';
-      btn.textContent = j.on ? 'تشغيل ✅' : 'إيقاف';
+      btn.textContent = j.on ? 'On ✅' : 'Off';
       document.getElementById('recBanner').classList.toggle('on', j.on);
-    } catch (e) { alert('فشل: ' + e.message); }
+    } catch (e) { alert('Failed: ' + e.message); }
     btn.disabled = false;
   };
   if (RECORDING_ON) document.getElementById('recBanner').classList.add('on');
@@ -1109,10 +1103,10 @@ function showInCall(on) {
 }
 function updateCtlButtons() {
   const held = sipHold || localHold;
-  setCtl(muteBtn, micMuted, micMuted ? '🔇' : '🎙️', micMuted ? 'إلغاء الكتم' : 'كتم');
-  setCtl(holdBtn, held, held ? '▶️' : '⏸️', reinv ? '...' : (held ? 'استئناف' : 'تعليق'));
+  setCtl(muteBtn, micMuted, micMuted ? '🔇' : '🎙️', micMuted ? 'Cancel Mute' : 'Mute');
+  setCtl(holdBtn, held, held ? '▶️' : '⏸️', reinv ? '...' : (held ? 'Resume' : 'Hold'));
   holdBtn.disabled = !established || !!reinv;
-  setCtl(spkBtn, speakerOn, speakerOn ? '🔊' : '📱', speakerOn ? 'سبيكر' : 'سماعة');
+  setCtl(spkBtn, speakerOn, speakerOn ? '🔊' : '📱', speakerOn ? 'Speaker' : 'Speaker');
 }
 function applyMediaState() {
   const held = sipHold || localHold;
@@ -1180,14 +1174,14 @@ function reinviteFailed(why) {
   if (!r) return;
   if (r.direction === 'sendonly') {
     localHold = true;  // fallback: hold locally, the call stays up
-    ctlNote.textContent = `السيرفر مقبلش التعليق (${why}) — اتعمل تعليق محلي (الميكروفون مقفول والصوت ساكت)`;
+    ctlNote.textContent = `Server rejected theHold (${why}) — Done Hold local (Microphone is muted)`;
   } else {
     sipHold = false; localHold = false;
-    ctlNote.textContent = `السيرفر مقبلش الاستئناف (${why}) — رجّعنا الصوت من عندك. لو الطرف التاني مش سامعك جرّب تعليق واستئناف تاني`;
+    ctlNote.textContent = `Server rejected theResume (${why}) — Audio restored from atk. If the other party cannot hear you, try Hold andResume again`;
   }
   logSip(`re-INVITE ${r.direction} failed: ${why}`);
   applyMediaState();
-  if (established) setStatus(sipHold || localHold ? 'المكالمة متعلقة ⏸️' : 'متصل ✅');
+  if (established) setStatus(sipHold || localHold ? 'Call stuck ⏸️' : 'Connected ✅');
 }
 async function onReinviteResponse(code, seq, headers, raw, body) {
   const r = reinv && reinv.seq === seq ? reinv : null;
@@ -1211,10 +1205,10 @@ async function onReinviteResponse(code, seq, headers, raw, body) {
     lastSentSdp = r.sdp;
     sipHold = r.direction === 'sendonly';
     localHold = false;
-    ctlNote.textContent = sipHold ? 'المكالمة متعلقة عند السيرفر' : '';
+    ctlNote.textContent = sipHold ? 'Call stuck at Server' : '';
     logSip(`re-INVITE ${r.direction} accepted (${code})`);
     applyMediaState();
-    setStatus(sipHold ? 'المكالمة متعلقة ⏸️' : 'متصل ✅');
+    setStatus(sipHold ? 'Call stuck ⏸️' : 'Connected ✅');
     return;
   }
   ackReinviteNon2xx(r, headers['to']);
@@ -1224,13 +1218,13 @@ holdBtn.onclick = () => {
   if (!established || uiEnded || hangupRequested || reinv) return;
   const held = sipHold || localHold;
   if (held && !sipHold) {  // only held locally -> resume locally
-    localHold = false; ctlNote.textContent = ''; applyMediaState(); setStatus('متصل ✅'); return;
+    localHold = false; ctlNote.textContent = ''; applyMediaState(); setStatus('Connected ✅'); return;
   }
   if (!pc || !pc.localDescription || !ws || ws.readyState !== 1) {
-    localHold = !held; applyMediaState(); setStatus(localHold ? 'المكالمة متعلقة ⏸️ (محلي)' : 'متصل ✅'); return;
+    localHold = !held; applyMediaState(); setStatus(localHold ? 'Call stuck ⏸️ (local)' : 'Connected ✅'); return;
   }
-  if (!held) { localHold = true; applyMediaState(); setStatus('جاري التعليق...'); }
-  else setStatus('جاري الاستئناف...');
+  if (!held) { localHold = true; applyMediaState(); setStatus('Putting on hold...'); }
+  else setStatus('Resuming...');
   ctlNote.textContent = '';
   sendReinvite(held ? 'sendrecv' : 'sendonly');
 };
@@ -1267,7 +1261,7 @@ spkBtn.onclick = async () => {
   const want = !speakerOn;
   if (typeof remoteAudio.setSinkId === 'function') {
     const devs = await outputDevices();
-    const spk = devs.find(d => /speaker|loud|مكبر/i.test(d.label) && !/head|ear|blue|bt/i.test(d.label));
+    const spk = devs.find(d => /speaker|loud|Loud/i.test(d.label) && !/head|ear|blue|bt/i.test(d.label));
     const ear = devs.find(d => /earpiece|receiver|handset|phone/i.test(d.label));
     let target = null;
     if (spk && ear) target = want ? spk : ear;
@@ -1280,7 +1274,7 @@ spkBtn.onclick = async () => {
         await remoteAudio.setSinkId(target.deviceId);
         sinkChanged = true;
         speakerOn = spk && ear ? want : target.deviceId !== 'default';
-        ctlNote.textContent = 'الصوت طالع من: ' + (target.label || 'جهاز صوت');
+        ctlNote.textContent = 'Audio coming from: ' + (target.label || 'audio device');
         logSip('Audio output: ' + (target.label || target.deviceId.slice(0, 8)));
         updateCtlButtons();
         return;
@@ -1292,7 +1286,7 @@ spkBtn.onclick = async () => {
       const d = await navigator.mediaDevices.selectAudioOutput();
       await remoteAudio.setSinkId(d.deviceId);
       sinkChanged = true; speakerOn = true;
-      ctlNote.textContent = 'الصوت طالع من: ' + (d.label || 'جهاز صوت');
+      ctlNote.textContent = 'Audio coming from: ' + (d.label || 'audio device');
       updateCtlButtons();
       return;
     } catch (e) { logSip('selectAudioOutput: ' + e.message); }
@@ -1300,7 +1294,7 @@ spkBtn.onclick = async () => {
   // Fallback (most mobile browsers can't pick earpiece/speaker): loudness boost
   speakerOn = want;
   if (want) attachBoost(); else stopBoost();
-  ctlNote.textContent = want ? 'المتصفح ده مش بيسمح بتغيير السماعة — علّينا الصوت بدالها 🔊' : '';
+  ctlNote.textContent = want ? 'This browser does not allow changing theSpeaker — we raised the volume instead 🔊' : '';
   updateCtlButtons();
 };
 
@@ -1310,7 +1304,7 @@ const padBtn = document.getElementById('padBtn');
 let dtmfQueue = '';
 function sendDtmf(d) {
   if (!'0123456789*#'.includes(d)) return;
-  if (!established) { ctlNote.textContent = 'الأرقام بتتبعت كنغمات بعد ما الطرف التاني يرد'; return; }
+  if (!established) { ctlNote.textContent = 'Keypad tones are sent after the other party answers'; return; }
   dtmfQueue += d;
   dtmfLine.textContent = dtmfQueue.slice(-20);
   const sender = pc && pc.getSenders ? pc.getSenders().find(x => x.track && x.track.kind === 'audio') : null;
@@ -1332,7 +1326,7 @@ function sendDtmf(d) {
 padBtn.onclick = () => {
   const on = !document.body.classList.contains('show-pad');
   document.body.classList.toggle('show-pad', on);
-  setCtl(padBtn, on, '⌨️', on ? 'إخفاء الأرقام' : 'الأرقام');
+  setCtl(padBtn, on, '⌨️', on ? 'Hide Keypad' : 'Keypad');
 };
 
 function resetInCall() {
@@ -1346,7 +1340,7 @@ function resetInCall() {
   ctlNote.textContent = '';
   dtmfQueue = ''; dtmfLine.textContent = '';
   document.body.classList.remove('show-pad');
-  setCtl(padBtn, false, '⌨️', 'الأرقام');
+  setCtl(padBtn, false, '⌨️', 'Keypad');
   showInCall(false);
 }
 window.addEventListener('beforeunload', () => {
@@ -1355,45 +1349,20 @@ window.addEventListener('beforeunload', () => {
   }
 });
 
-// ---------- redial: last number per browser ----------
-const LAST_KEY = 'easycalls.lastNumber';
-const redialBtn = document.getElementById('redialBtn');
-function getLast() { try { const v = JSON.parse(localStorage.getItem(LAST_KEY) || 'null'); return v && v.raw ? v : null; } catch (e) { return null; } }
-function saveLast(raw, cc) { try { localStorage.setItem(LAST_KEY, JSON.stringify({ raw, cc })); } catch (e) {} showRedial(); }
-function showRedial() {
-  const last = getLast();
-  redialBtn.style.display = last ? '' : 'none';
-  document.getElementById('redialNum').textContent = last ? last.raw : '';
-}
-function loadLast() {
-  const last = getLast();
-  if (!last) return false;
-  if (last.cc && COUNTRY_BY_CODE[last.cc]) picker.value = last.cc;
-  numInput.value = last.raw;
-  detectCountry();
-  return true;
-}
-redialBtn.onclick = () => {
-  if (!uiEnded || callBtn.style.display === 'none') return;   // a call is already starting
-  if (loadLast()) callBtn.click();
-};
-showRedial();
-
 callBtn.onclick = async () => {
   if (!uiEnded || callBtn.style.display === 'none') return;
-  if (!numInput.value.trim() && loadLast()) { setStatus('ده آخر رقم اتصلت بيه — دوس اتصال تاني 📞'); return; }
+  if (!numInput.value.trim()) { setStatus('Enter the number first'); return; }
   const target = parseNumber(numInput.value);
-  if (!target || !target.national) { setStatus('اكتب الرقم الأول'); return; }
-  saveLast(numInput.value.trim(), picker.value);
+  if (!target || !target.national) { setStatus('Enter the number first'); return; }
   const country = COUNTRY_BY_CODE[target.cc];
   const coins = currentCoins();
   if (country && coins !== null && coins < country.rate) {
-    setStatus(`⚠️ كوينزك ${coins} C أقل من سعر الدقيقة لـ ${country.name} (${country.rate} C/دقيقة)`);
-    if (!confirm(`كوينزك ${coins} C وسعر الدقيقة لـ ${country.name} ${country.rate} C.\nالسيرفر غالباً هيرفض المكالمة (رصيد مش كفاية).\nلو شحنت كوينز دلوقتي اضغط 🔄 الأول.\n\nتكمل برضه؟`)) return;
+    setStatus(`⚠️ Your ${coins} C is less than the price per min for ${country.name} (${country.rate} C/min)`);
+    if (!confirm(`Your ${coins} C and the per-min price for ${country.name} is ${country.rate} C.\nServer will likely reject the call (insufficient balance).\nIf you topped up coins now, press \u0001f504 to refresh.\n\nContinue anyway?`)) return;
   }
-  setStatus('تجهيز المكالمة...');
+  setStatus('Preparing call...');
   timerEl.textContent = '';
-  sipLogEl.textContent = `SIP Log: بدء الاتصال بـ +${target.cc} ${target.national}...`;
+  sipLogEl.textContent = `SIP Log: starting call to +${target.cc} ${target.national}...`;
   remoteAudio.play().catch(() => {});
   callBtn.style.display = 'none';
   try {
@@ -1406,7 +1375,7 @@ callBtn.onclick = async () => {
     if (info.error) {
       showBalances(info);
       const codeTxt = info.retCode !== undefined && info.retCode !== null ? ` (retCode ${info.retCode})` : '';
-      setStatus((info.message ? '⚠️ ' + info.message : 'خطأ: ' + info.error + (info.retMsg ? ' — ' + info.retMsg : '')) + codeTxt);
+      setStatus((info.message ? '⚠️ ' + info.message : 'Error: ' + info.error + (info.retMsg ? ' — ' + info.retMsg : '')) + codeTxt);
       logSip(`call/req rejected: retCode=${info.retCode} retMsg=${info.retMsg || ''}`);
       callBtn.style.display = '';
       return;
@@ -1430,7 +1399,7 @@ callBtn.onclick = async () => {
     callInfo._useWss = isTlsFlag === '1';
 
     const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws-proxy?host=${encodeURIComponent(info.webrtcAddr)}&port=${encodeURIComponent(info.webrtcPort)}&tls=${isTlsFlag}`;
-    setStatus('جاري ربط البروكسي بالسيرفر...');
+    setStatus('Connecting proxy to server...');
     const sock = new WebSocket(wsUrl);
     ws = sock;
     uiEnded = false; proxyFailed = false;
@@ -1438,7 +1407,7 @@ callBtn.onclick = async () => {
     showInCall(true);
     openControl(target);
 
-    sock.onopen = () => { setStatus('البروكسي جاهز، جاري فتح خط SIP...'); startKeepalive(); };
+    sock.onopen = () => { setStatus('Proxy ready, opening SIP line...'); startKeepalive(); };
     sock.onmessage = e => {
       if (sock !== ws) return;
       if (typeof e.data === 'string' && e.data.startsWith('ERROR:diag:')) {
@@ -1458,13 +1427,13 @@ callBtn.onclick = async () => {
       }
       onSipMessage(e.data);
     };
-    sock.onerror = () => { if (sock === ws) setStatus('خطأ في الاتصال بالسيرفر'); };
+    sock.onerror = () => { if (sock === ws) setStatus('Call error with the server'); };
     sock.onclose = e => {
       logSip(`WS Closed: code=${e.code}`);
-      if (sock === ws && !uiEnded && !proxyFailed) endCallUI('انقطع الاتصال بالسيرفر (code ' + e.code + ')');
+      if (sock === ws && !uiEnded && !proxyFailed) endCallUI('Disconnected from server (code ' + e.code + ')');
     };
   } catch (e) {
-    setStatus('خطأ: ' + e.message);
+    setStatus('Error: ' + e.message);
     callBtn.style.display = '';
   }
 };
