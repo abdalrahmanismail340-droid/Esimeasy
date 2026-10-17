@@ -22,23 +22,10 @@ TOKEN = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
 OWNER_RAW = (os.environ.get("TELEGRAM_OWNER_ID") or "").strip()
 OWNER_ID = int(OWNER_RAW) if OWNER_RAW.lstrip("-").isdigit() else None
 
-# ---------- admin list (persistent) ----------
-_ADMINS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tg_admins.json")
-
-def _load_admins():
-    try:
-        with open(_ADMINS_FILE, encoding="utf-8") as f:
-            data = json.load(f)
-            return set(int(x) for x in data if str(x).lstrip("-").isdigit())
-    except Exception:
-        return set()
-
-def _save_admins(admins):
-    try:
-        with open(_ADMINS_FILE, "w", encoding="utf-8") as f:
-            json.dump(sorted(admins), f)
-    except Exception as e:
-        print(f"[tg] save admins failed: {type(e).__name__}", flush=True)
+# ---------- admin list (persistent in SQLite via share_links) ----------
+def _sl():
+    import share_links as S
+    return S
 
 def is_admin(uid):
     try:
@@ -47,7 +34,10 @@ def is_admin(uid):
         return False
     if OWNER_ID is not None and uid == OWNER_ID:
         return True
-    return uid in _load_admins()
+    try:
+        return _sl().tg_is_admin(uid)
+    except Exception:
+        return False
 
 def is_owner(uid):
     try:
@@ -265,9 +255,7 @@ def _handle_text(text, from_id=None):
             send("الأمر ده للأونر بس."); return
         if not arg.lstrip("-").isdigit():
             send("استخدم: <code>/addadmin 123456789</code>"); return
-        admins = _load_admins()
-        admins.add(int(arg))
-        _save_admins(admins)
+        _sl().tg_add_admin(int(arg))
         send(f"✅ بقى أدمن: <code>{arg}</code>"); return
 
     if cmd == "/deladmin":
@@ -275,15 +263,13 @@ def _handle_text(text, from_id=None):
             send("الأمر ده للأونر بس."); return
         if not arg.lstrip("-").isdigit():
             send("استخدم: <code>/deladmin 123456789</code>"); return
-        admins = _load_admins()
-        admins.discard(int(arg))
-        _save_admins(admins)
+        _sl().tg_del_admin(int(arg))
         send(f"🗑️ اتشال من الأدمنز: <code>{arg}</code>"); return
 
     if cmd == "/admins":
         if not is_owner(from_id):
             send("الأمر ده للأونر بس."); return
-        admins = _load_admins()
+        admins = _sl().tg_list_admins()
         if not admins:
             send("مفيش أدمنز مضافين."); return
         send("👥 الأدمنز:\n" + "\n".join(f"• <code>{a}</code>" for a in sorted(admins))); return

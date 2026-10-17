@@ -78,6 +78,10 @@ def init(secret_key):
             value TEXT,
             PRIMARY KEY (owner_id, key)
         );
+        CREATE TABLE IF NOT EXISTS tg_admins (
+            user_id INTEGER PRIMARY KEY,
+            added_at INTEGER NOT NULL
+        );
     """)
     key = base64.urlsafe_b64encode(hashlib.sha256(
         ("share-links:" + (secret_key or "")).encode()).digest())
@@ -242,3 +246,23 @@ def find_owner_by_setting(key, value):
 def latest_owner():
     rows = _q("SELECT owner_id FROM owners ORDER BY updated_at DESC LIMIT 1")
     return rows[0]["owner_id"] if rows else None
+
+
+# ---------- Telegram bot admins (persistent) ----------
+def tg_add_admin(user_id):
+    import time
+    _conn.execute("INSERT OR IGNORE INTO tg_admins (user_id, added_at) VALUES (?, ?)",
+                  (int(user_id), int(time.time())))
+
+def tg_del_admin(user_id):
+    _conn.execute("DELETE FROM tg_admins WHERE user_id = ?", (int(user_id),))
+
+def tg_list_admins():
+    return [r[0] for r in _conn.execute("SELECT user_id FROM tg_admins ORDER BY user_id")]
+
+def tg_is_admin(user_id):
+    try:
+        r = _conn.execute("SELECT 1 FROM tg_admins WHERE user_id = ?", (int(user_id),)).fetchone()
+        return r is not None
+    except Exception:
+        return False
