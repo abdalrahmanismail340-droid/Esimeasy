@@ -1,6 +1,5 @@
 from gevent import monkey
 monkey.patch_all()
-import gevent
 
 import os
 import ssl
@@ -8,7 +7,7 @@ import uuid
 import base64
 import threading
 from datetime import timedelta
-from flask import Flask, redirect, url_for, session, render_template, request, g
+from flask import Flask, redirect, url_for, session, render_template, request
 from flask_sock import Sock
 from authlib.integrations.flask_client import OAuth
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -17,21 +16,12 @@ from cryptography.hazmat.primitives import padding
 import requests
 import websocket as ws_client
 from rates import RATES
-from iso3_codes import CALLING_CODE_TO_ISO3, RATE_PREFIX_ALIASES
-from retcodes import message_for, is_definitive
-import share_links
-import telegram_bot
+from iso3_codes import CALLING_CODE_TO_ISO3
 
 ESIMEASY_LOGIN_URL = "https://esimapi.esimeasy.co.kr:8444/esimeasyasd/v4/user/login"
 ESIMEASY_CALL_REQ_URL = "https://esimapi.esimeasy.co.kr:8444/baycscsd/outbound/dtls/call/req"
 ESIMEASY_AUTH_REQ_URL = "https://esimapi.esimeasy.co.kr:8444/esimeasyasd/user/authen/whatsapp/req"
 ESIMEASY_AUTH_RES_URL = "https://esimapi.esimeasy.co.kr:8444/esimeasyasd/user/authen/whatsapp/res"
-ESIMEASY_SESSION_INFO_URL = "https://esimapi.esimeasy.co.kr:8444/esimeasyasd/session/info/v1"
-# Current official app version (APK v1.8.8, versionCode 132). LEGACY_APP_VERSION is
-# what this project sent before and is known to work; used only as a fallback.
-APP_VERSION = "1.8.8"
-LEGACY_APP_VERSION = "3.0.0"
-NETWORK_TYPES = {"NT0000", "NT0001", "NT0003"}  # unknown / wifi / cellular (MakeOutbound)
 # AES key/IV the official app uses to encrypt the userId before login
 ESIMEASY_AES_KEY = b"Ykuf2gLd95W?Zfsd"
 
@@ -51,15 +41,7 @@ def esim_encrypt_user_id(plain):
 
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY") or "dev-secret-change-me"
-if app.secret_key == "dev-secret-change-me":
-    print("[warn] SECRET_KEY is not set - using an insecure dev key. Set SECRET_KEY in Railway.", flush=True)
-share_links.init(app.secret_key)
-try:
-    share_links.purge_old()
-except Exception as _e:
-    print(f"[share-links] purge failed: {type(_e).__name__}", flush=True)
-telegram_bot.start()
+app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
 app.permanent_session_lifetime = timedelta(days=30)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
@@ -73,7 +55,6 @@ google = oauth.register(
 )
 
 sock = Sock(app)
-BROWSER_KEEPALIVE = "__ka__"
 
 
 @sock.route("/ws-echo")
@@ -110,13 +91,9 @@ def ws_proxy(ws):
             pass
 
     try:
-        ctx = _ctx()
-        if not ctx:
+        if "user" not in session:
             send_error_and_close("no-login-session")
             return
-        # Share-link browsers never see the owner's sessionId: they send a
-        # placeholder in the SIP From display name and it is swapped here.
-        sip_secret = (ctx.get("esim") or {}).get("sessionId") if ctx["mode"] == "link" else None
 
         target_host = request.args.get("host", "").strip()
         target_port = request.args.get("port", "").strip()
@@ -204,8 +181,6 @@ def ws_proxy(ws):
                     break
                 if msg is None or msg == "":
                     break
-                if sip_secret and isinstance(msg, str):
-                    msg = msg.replace(sip_secret, SIP_ID_PLACEHOLDER)
                 try:
                     ws.send(msg)
                 except Exception:
@@ -213,19 +188,8 @@ def ws_proxy(ws):
         finally:
             stop.set()
 
-    def backend_pinger():
-        # WebSocket-level ping to the SIP server every 15s so idle connections
-        # are not dropped (instead of injecting SIP OPTIONS into the dialog).
-        while not stop.wait(15):
-            try:
-                backend.ping("ka")
-            except Exception:
-                stop.set()
-                break
-
     t = threading.Thread(target=backend_to_browser, daemon=True)
     t.start()
-    threading.Thread(target=backend_pinger, daemon=True).start()
     try:
         while not stop.is_set():
             try:
@@ -234,11 +198,6 @@ def ws_proxy(ws):
                 break
             if msg is None:
                 break
-            if msg == BROWSER_KEEPALIVE:
-                # browser <-> proxy keepalive; never forwarded to the SIP server
-                continue
-            if sip_secret and isinstance(msg, str):
-                msg = msg.replace(SIP_ID_PLACEHOLDER, sip_secret)
             try:
                 backend.send(msg)
             except Exception:
@@ -255,73 +214,12 @@ def ws_proxy(ws):
             pass
 
 
-SIP_ID_PLACEHOLDER = "__SIP_ID__"
-LINK_STATUS_AR = {
-    "expired": "الرابط ده انتهت صلاحيته. اطلب من صاحبه يعمل رابط جديد.",
-    "revoked": "الرابط ده اتلغى من صاحبه.",
-    "invalid": "الرابط ده مش صحيح أو مش موجود.",
-    "session": "جلسة Easy eSIM الخاصة بصاحب الرابط انتهت. صاحب الرابط لازم يسجّل دخول تاني على الموقع ويعمل رابط جديد.",
-}
-OWNER_ONLY_MSG = "الخاصية دي مش متاحة من رابط المشاركة."
-
-
-def _owner_id(user=None):
-    u = user if user is not None else (session.get("user") or {})
-    return u.get("google_id") or u.get("email") or ""
-
-
-def _ctx():
-    """Who is calling: the logged-in owner (Google session) or a share-link
-    visitor (session holds only the link id; the eSIMEasy session is loaded
-    from the server-side store and never put in the cookie)."""
-    if "ctx" in g:
-        return g.ctx
-    ctx = None
-    if session.get("user"):
-        ctx = {"mode": "owner", "user": session["user"],
-               "esim": session.get("esimeasy") or {},
-               "phone_auth": bool(session.get("phone_authenticated")),
-               "device_id": session.get("device_id"), "owner_id": _owner_id()}
-    elif session.get("link_id"):
-        status, row = share_links.get_link(session["link_id"])
-        owner = share_links.get_owner(row["owner_id"]) if status == "active" else None
-        if owner and owner["esim"].get("sessionId"):
-            label = row["label"] or ""
-            ctx = {"mode": "link",
-                   "user": {"name": "رابط مشترك" + (f" — {label}" if label else ""),
-                            "email": "", "picture": None, "shared": True},
-                   "esim": owner["esim"], "phone_auth": owner["phone_auth"],
-                   "device_id": owner["device_id"], "owner_id": row["owner_id"],
-                   "link_id": row["id"], "expires_at": row["expires_at"]}
-        else:
-            g.link_status = status if status != "active" else "session"
-            session.pop("link_id", None)
-    g.ctx = ctx
-    return ctx
-
-
-def _store_esim(ctx, esim):
-    """Persist refreshed eSIMEasy data for the current context."""
-    if ctx["mode"] == "owner":
-        session["esimeasy"] = esim
-        share_links.save_owner(ctx["owner_id"], esim, ctx.get("phone_auth"), ctx.get("device_id"))
-    else:
-        share_links.update_owner_balances(ctx["owner_id"], esim.get("remainCallPoint"),
-                                          esim.get("remainPoint"))
-    ctx["esim"] = esim
-
-
 @app.route("/")
 def index():
-    ctx = _ctx()
-    if ctx and ctx["mode"] == "owner":
-        return render_template("dashboard.html", user=ctx["user"], esim=ctx["esim"],
-                               expiry_choices=share_links.EXPIRY_CHOICES,
-                               default_hours=share_links.DEFAULT_HOURS)
-    if ctx:
-        return redirect(url_for("dialer"))
-    if g.get("link_status"):
-        return render_template("share_open.html", message=LINK_STATUS_AR[g.link_status]), 410
+    user = session.get("user")
+    if user:
+        return render_template("dashboard.html", user=user,
+                               esim=session.get("esimeasy"))
     return render_template("login.html")
 
 
@@ -345,20 +243,9 @@ def callback():
             "picture": userinfo.get("picture"),
             "google_id": google_id,
         }
-        session.pop("link_id", None)
         if google_id or email:
             session["esimeasy"] = esimeasy_login(google_id, email)
-            # keep existing share links on the owner's newest session
-            share_links.save_owner(_owner_id(), session["esimeasy"],
-                                   session.get("phone_authenticated"), session.get("device_id"))
     return redirect(url_for("index"))
-
-
-def _num(v):
-    try:
-        return float(v or 0)
-    except (TypeError, ValueError):
-        return 0.0
 
 
 def esimeasy_login(google_user_id, email=""):
@@ -387,14 +274,8 @@ def esimeasy_login(google_user_id, email=""):
     last_data = {}
     last_err = None
 
-    # Same identity order as before (the official app sends AES(google id) only);
-    # each identity is tried with the current app version first, then the legacy one,
-    # before moving on, so a version problem can never switch us to another account.
-    attempts = [(enc_id, ver, use_json)
-                for enc_id in candidates
-                for ver in (APP_VERSION, LEGACY_APP_VERSION)
-                for use_json in (True, False)]
-    for enc_id, app_version, use_json in attempts:
+    for enc_id in candidates:
+        for use_json in (True, False):
             payload = {
                 "userId": enc_id,
                 "paramUserId": enc_id,
@@ -408,7 +289,7 @@ def esimeasy_login(google_user_id, email=""):
                 "pushToken": SPOOFED_PUSH_TOKEN,
                 "installRootId": SPOOFED_INSTALL_ROOT,
                 "isTest": False if use_json else "false",
-                "appVersion": app_version,
+                "appVersion": "3.0.0",
                 "languageCd": "en",
             }
             try:
@@ -426,13 +307,13 @@ def esimeasy_login(google_user_id, email=""):
 
             last_data = data
             if data.get("sessionId"):
-                if app_version != APP_VERSION:
-                    print(f"[login] succeeded only with legacy appVersion {app_version}", flush=True)
+                try:
+                    balance = float(data.get("remainCallPoint") or 0)
+                except (TypeError, ValueError):
+                    balance = 0
                 return {
                     "sessionId": data.get("sessionId"),
-                    "remainCallPoint": _num(data.get("remainCallPoint")),
-                    "remainPoint": _num(data.get("remainPoint")),
-                    "appVersion": app_version,
+                    "remainCallPoint": balance,
                     "memberId": data.get("memberId", ""),
                     "email": data.get("email", ""),
                 }
@@ -442,10 +323,8 @@ def esimeasy_login(google_user_id, email=""):
 
     ret_code = last_data.get("retCode")
     ret_msg = last_data.get("retMsg") or last_data.get("message") or ""
-    print(f"[login REJECTED] retCode={ret_code} retMsg={ret_msg!r}", flush=True)
     return {
         "_error": f"[b3] retCode={ret_code} {ret_msg}".strip(),
-        "_message": message_for(ret_code),
         "_retCode": ret_code,
         "_raw": str(last_data)[:250],
     }
@@ -453,35 +332,20 @@ def esimeasy_login(google_user_id, email=""):
 
 @app.route("/dialer")
 def dialer():
-    ctx = _ctx()
-    if not ctx:
+    if "user" not in session:
         return redirect(url_for("index"))
-    esim = ctx["esim"]
+    esim = session.get("esimeasy") or {}
     if not esim.get("sessionId"):
         return redirect(url_for("index"))
-    countries = sorted(
-        ({"code": code, "name": name, "rate": rate}
-         for code, entries in RATES.items() for name, rate in entries[:1]),
-        key=lambda c: c["name"])
-    return render_template("dialer.html", user=ctx["user"],
-                           balance=esim.get("remainCallPoint", 0),
-                           countries=countries,
-                           phone_authenticated=ctx["phone_auth"],
-                           shared=ctx["mode"] == "link",
-                           link_expires_at=ctx.get("expires_at"),
-                           recording=share_links.get_setting(ctx["owner_id"], "recording", "0") == "1",
-                           telegram_ready=telegram_bot.READY,
-                           expiry_choices=share_links.EXPIRY_CHOICES,
-                           default_hours=share_links.DEFAULT_HOURS)
+    return render_template("dialer.html", user=session["user"],
+                           balance=esim.get("remainCallPoint", 0))
 
 
 @app.route("/api/call/setup", methods=["POST"])
 def api_call_setup():
-    ctx = _ctx()
-    if not ctx:
-        return {"error": "not logged in",
-                "message": LINK_STATUS_AR.get(g.get("link_status") or "", "")}, 401
-    esim = ctx["esim"]
+    if "user" not in session:
+        return {"error": "not logged in"}, 401
+    esim = session.get("esimeasy") or {}
     session_id = esim.get("sessionId")
     if not session_id:
         return {"error": "eSIMEasy not connected"}, 400
@@ -492,13 +356,6 @@ def api_call_setup():
         return {"error": "missing number"}, 400
 
     dial_number = number.lstrip("0")
-    # Some rate prefixes (e.g. 1907 Alaska, 1808 Hawaii, 1787/1939 Puerto Rico)
-    # are not country codes in the official app's table: they are dialled as
-    # country "1" with the area code kept as part of the national number.
-    alias = RATE_PREFIX_ALIASES.get(country_code)
-    if alias:
-        dial_number = country_code[len(alias):] + dial_number
-        country_code = alias
     # التطبيق الأصلي بيبعت كود الدولة بنظام ISO3 (زي "EGY" لمصر، "USA" لأمريكا)
     # في paramUniqueId/nationalUniqueId — مش UUID عشوائي زي ما كنا باعتين.
     # الجدول ده مستخرج من tt.smali في الـ APK الرسمي.
@@ -507,89 +364,45 @@ def api_call_setup():
         # كود دولة مش موجود في الجدول (نادر) — fallback لمنع كراش، لكن ده
         # هيفشل زي قبل كده لو السيرفر فعلاً بيتحقق من القيمة دي.
         unique_id = uuid.uuid4().hex
-    network_tp = str(body.get("networkTp", "")).strip().upper()
-    if network_tp not in NETWORK_TYPES:
-        network_tp = "NT0001"  # Wi-Fi: what the working requests used
+    device_id = session.get("device_id") or str(uuid.uuid4())
 
-    # Exactly the fields the official app sends (MakeOutbound, APK v1.8.8).
     payload = {
-        "paramUniqueId": unique_id,
-        "paramNationalId": country_code,
-        "paramPhoneId": dial_number,
         "sessionId": session_id,
+        "paramUniqueId": unique_id,
         "nationalUniqueId": unique_id,
+        "paramNationalId": country_code,
         "nationalId": country_code,
+        "paramPhoneId": dial_number,
         "phoneId": dial_number,
-        "networkTp": network_tp,
+        "networkTp": "NT0001",
         "appCd": "ACT0060",
-        "appVersion": APP_VERSION,
+        "appVersion": "3.0.0",
         "languageCd": "en",
+        "deviceOs": "AT0001",
+        "deviceId": device_id,
+        "deviceModel": "SM-A366B",
+        "deviceOsVersion": "14",
+        "pushToken": SPOOFED_PUSH_TOKEN,
+        "installRootId": SPOOFED_INSTALL_ROOT,
     }
-    # Previous request shape (legacy appVersion + device/push fields). It got
-    # retCode=1 on 2026-10-17 03:27 Cairo, so it is kept as a one-time fallback
-    # when the app-exact request is rejected for a non-account reason.
-    device_id = ctx.get("device_id") or str(uuid.uuid4())
-    legacy_payload = dict(payload, networkTp="NT0001", appVersion=LEGACY_APP_VERSION,
-                          deviceOs="AT0001", deviceId=device_id, deviceModel="SM-A366B",
-                          deviceOsVersion="14", pushToken=SPOOFED_PUSH_TOKEN,
-                          installRootId=SPOOFED_INSTALL_ROOT)
-
-    def _post(p):
-        r = requests.post(ESIMEASY_CALL_REQ_URL, json=p,
-                          headers={"User-Agent": "okhttp/4.9.3"}, timeout=20)
-        return r.json()
-
-    def _ok(d):
-        return isinstance(d, dict) and bool(d.get("webrtcId"))
-
-    def _code_msg(d):
-        d = d if isinstance(d, dict) else {}
-        return d.get("retCode"), (d.get("retMsg") or d.get("message") or "")
-
     try:
-        data = _post(payload)
+        r = requests.post(ESIMEASY_CALL_REQ_URL, json=payload,
+                          headers={"User-Agent": "okhttp/4.9.3"}, timeout=20)
+        data = r.json()
     except Exception as e:
         return {"error": f"call setup failed: {e}"}, 502
-    used = "app"
-    if not _ok(data):
-        code, msg = _code_msg(data)
-        # rejection logging: code + message only
-        print(f"[call/req REJECTED] retCode={code} retMsg={msg!r}", flush=True)
-        if not is_definitive(code):
-            try:
-                legacy = _post(legacy_payload)
-            except Exception as e:
-                legacy = None
-                print(f"[call/req legacy fallback failed] {type(e).__name__}", flush=True)
-            if _ok(legacy):
-                data, used = legacy, "legacy"
-            elif legacy is not None:
-                lcode, lmsg = _code_msg(legacy)
-                print(f"[call/req REJECTED legacy] retCode={lcode} retMsg={lmsg!r}", flush=True)
-    if not _ok(data):
-        code, msg = _code_msg(data)
-        message = message_for(code, msg)
-        expired = False
-        if ctx["mode"] == "link" and str(code) not in ("-539", "-516", "-517", "-523", "-558"):
-            # tell the visitor clearly when the owner's eSIMEasy session is gone
-            expired = _session_info(session_id) is None
-            if expired:
-                message = LINK_STATUS_AR["session"]
+    if not isinstance(data, dict) or not data.get("webrtcId"):
         return {"error": "call setup rejected",
-                "retCode": code,
-                "retMsg": msg,
-                "message": message,
-                "sessionExpired": expired,
-                "coins": esim.get("remainCallPoint"),
-                "points": esim.get("remainPoint")}, 502
+                "retCode": data.get("retCode") if isinstance(data, dict) else None,
+                "raw": str(data)[:300]}, 502
 
-    # Log only non-secret diagnostics (never sessionId / webrtcPwd / turnPwd).
-    print(f"[call/req] retCode={data.get('retCode')} via={used} callSequence={data.get('callSequence')} "
-          f"country_code={country_code} uniqueId={unique_id} networkTp={network_tp} "
-          f"isTls={data.get('isTls')} isDtls={data.get('isDtls')} isTurn={data.get('isTurn')} "
-          f"fields={sorted(data.keys())}" + (" mode=link" if ctx["mode"] == "link" else ""), flush=True)
-    if ctx["mode"] == "link":
-        share_links.touch(ctx["link_id"])
+    # طباعة الـ response الكامل في لوج السيرفر (Railway logs) — ده بيوريك أي حقل
+    # خفي (زي confirm token، billing id، caller verification flag) ممكن يكون
+    # السيرفر بيستناه ومش موجود في الطلب بتاعنا. شوفه بعد أي محاولة اتصال فاشلة.
+    print(f"[call/req FULL RESPONSE] {data}", flush=True)
+    print(f"[call/req FULL PAYLOAD SENT] {payload}", flush=True)
+    print(f"[call/req] country_code={country_code} -> ISO3 uniqueId={unique_id}", flush=True)
+    print(f"[call/req] sipIdentity (sessionId used as SIP From)={session_id}", flush=True)
 
     return {
         "callSequence": data.get("callSequence"),
@@ -611,18 +424,16 @@ def api_call_setup():
         # ولا ISO3 — هو sessionId بتاع تسجيل الدخول نفسه (اتأكد من smali:
         # Lbn4;->n بيتحط من ResultLogin.getSessionId()/ResultUserJoin.getSessionId()
         # في wn1.smali و g64.smali). ده اللي لازم يتبعت في الـ From، مش uniqueId.
-        "sipIdentity": session_id if ctx["mode"] == "owner" else SIP_ID_PLACEHOLDER,
+        "sipIdentity": session_id,
         # كل الحقول الراجعة من السيرفر من غير فلترة — عشان نشوف أي حاجة ناقصة
         # في الريسبونس من غير ما نفتح Railway logs كل مرة.
         "rawFields": list(data.keys()),
-        "coins": esim.get("remainCallPoint"),
-        "points": esim.get("remainPoint"),
     }
 
 
 @app.route("/api/prefix/<code>")
 def api_prefix(code):
-    if not _ctx():
+    if "user" not in session:
         return {"error": "not logged in"}, 401
     entries = RATES.get(code)
     if not entries:
@@ -645,10 +456,6 @@ def api_phone_auth_req():
     phone_id = str(body.get("phoneId", "")).strip().lstrip("0")
     if not national_id or not phone_id:
         return {"error": "nationalId and phoneId required"}, 400
-    alias = RATE_PREFIX_ALIASES.get(national_id)
-    if alias:
-        phone_id = national_id[len(alias):] + phone_id
-        national_id = alias
     esim = session["esimeasy"]
     device_id = session.get("device_id") or str(uuid.uuid4())
     session["device_id"] = device_id
@@ -670,9 +477,7 @@ def api_phone_auth_req():
     session["phone_auth_pending"] = {"nationalId": national_id, "phoneId": phone_id,
                                      "seqNo": data.get("seqNo", "")}
     return {"retCode": data.get("retCode"), "seqNo": data.get("seqNo", ""),
-            "retryCount": data.get("retryCount", 0),
-            "message": message_for(data.get("retCode"), data.get("retMsg") or ""),
-            "raw": str(data)[:300]}
+            "retryCount": data.get("retryCount", 0), "raw": str(data)[:300]}
 
 
 @app.route("/api/phone-auth/res", methods=["POST"])
@@ -711,11 +516,7 @@ def api_phone_auth_res():
     if ok:
         session["phone_authenticated"] = True
         session.pop("phone_auth_pending", None)
-        share_links.save_owner(_owner_id(), session.get("esimeasy") or {}, True,
-                               session.get("device_id"))
-    return {"retCode": data.get("retCode"), "ok": ok,
-            "message": message_for(data.get("retCode"), data.get("retMsg") or ""),
-            "raw": str(data)[:300]}
+    return {"retCode": data.get("retCode"), "ok": ok, "raw": str(data)[:300]}
 
 
 @app.route("/api/debug/session")
@@ -753,339 +554,16 @@ def ws_monitor():
     return render_template("ws_monitor.html")
 
 
-def _relogin(keep_on_failure=False):
-    user = session.get("user") or {}
-    result = esimeasy_login(user.get("google_id", ""), user.get("email", ""))
-    current = session.get("esimeasy") or {}
-    # a failed balance refresh must not wipe a working eSIMEasy session
-    if result.get("sessionId") or not (keep_on_failure and current.get("sessionId")):
-        session["esimeasy"] = result
-        share_links.save_owner(_owner_id(user), result, session.get("phone_authenticated"),
-                               session.get("device_id"))
-    return result
-
-
-@app.route("/esim/retry", methods=["POST"])
-def esim_retry():
-    """Retry the eSIMEasy login without logging out of Google."""
-    if "user" not in session:
-        return redirect(url_for("index"))
-    _relogin()
-    return redirect(url_for("index"))
-
-
-def _session_info(session_id):
-    """session/info/v1 (same request as the official app's MakeSessionInfo).
-    Returns the parsed dict on retCode 1, else None."""
-    payload = {
-        "sessionId": session_id,
-        "isPushOn": True,
-        "pushToken": SPOOFED_PUSH_TOKEN,
-        "deviceOs": "AT0001",
-        "installRootId": SPOOFED_INSTALL_ROOT,
-        "isTest": False,
-        "appVersion": APP_VERSION,
-        "languageCd": "en",
-    }
-    try:
-        r = requests.post(ESIMEASY_SESSION_INFO_URL, json=payload,
-                          headers={"User-Agent": "okhttp/4.9.3", "Accept": "application/json"},
-                          timeout=15)
-        data = r.json()
-    except Exception as e:
-        print(f"[session/info] failed: {type(e).__name__}", flush=True)
-        return None
-    if isinstance(data, dict) and str(data.get("retCode")) == "1":
-        return data
-    d = data if isinstance(data, dict) else {}
-    print(f"[session/info REJECTED] retCode={d.get('retCode')} "
-          f"retMsg={(d.get('retMsg') or d.get('message') or '')!r}", flush=True)
-    return None
-
-
-@app.route("/api/esim/refresh", methods=["POST"])
-def api_esim_refresh():
-    """Fresh balances: Easy Coins (C, remainCallPoint - pays for calls) and
-    Easy Points (P, remainPoint). Uses session/info/v1; re-logs in only if the
-    session is no longer valid."""
-    ctx = _ctx()
-    if not ctx:
-        return {"error": LINK_STATUS_AR.get(g.get("link_status") or "", "not logged in")}, 401
-    esim = dict(ctx["esim"])
-    info = _session_info(esim["sessionId"]) if esim.get("sessionId") else None
-    if info is not None:
-        esim["remainCallPoint"] = _num(info.get("remainCallPoint"))
-        esim["remainPoint"] = _num(info.get("remainPoint"))
-        _store_esim(ctx, esim)
-        source = "session"
-    elif ctx["mode"] == "link":
-        # no re-login from a share link: the owner must log in again
-        return {"error": LINK_STATUS_AR["session"], "sessionExpired": True}, 502
-    else:
-        esim = _relogin(keep_on_failure=True)
-        if not esim.get("sessionId"):
-            return {"error": esim.get("_message") or esim.get("_error", "login failed")}, 502
-        source = "login"
-    return {"coins": esim.get("remainCallPoint", 0), "points": esim.get("remainPoint", 0),
-            "balance": esim.get("remainCallPoint", 0), "source": source}
-
-
 @app.route("/logout")
 def logout():
-    # keep device_id so the account keeps seeing the same "device"
-    if session.get("user") and request.args.get("revoke") == "1":
-        n = share_links.revoke_all(_owner_id())
-        print(f"[share-links] revoked {n} on logout", flush=True)
-    was_link = bool(session.get("link_id")) and not session.get("user")
-    for key in ("user", "esimeasy", "phone_authenticated", "phone_auth_pending", "balance",
-                "link_id"):
-        session.pop(key, None)
-    if was_link:
-        return render_template("share_open.html", message="خرجت من الرابط المشترك. تقدر تفتحه تاني من نفس الرابط لو لسه صالح.")
+    session.pop("user", None)
+    session.pop("esimeasy", None)
     return redirect(url_for("index"))
-
-
-# ---------- share links ----------
-def _owner_ctx():
-    ctx = _ctx()
-    return ctx if ctx and ctx["mode"] == "owner" else None
-
-
-def _link_json(r):
-    return {"id": r["id"], "label": r.get("label") or "", "created_at": r["created_at"],
-            "expires_at": r["expires_at"], "last_used_at": r.get("last_used_at")}
-
-
-@app.route("/api/links", methods=["GET"])
-def api_links_list():
-    ctx = _owner_ctx()
-    if not ctx:
-        return {"error": OWNER_ONLY_MSG}, 403
-    return {"links": [_link_json(r) for r in share_links.list_active(ctx["owner_id"])]}
-
-
-@app.route("/api/links", methods=["POST"])
-def api_links_create():
-    ctx = _owner_ctx()
-    if not ctx:
-        return {"error": OWNER_ONLY_MSG}, 403
-    if not ctx["esim"].get("sessionId"):
-        return {"error": "Easy eSIM مش متصل. اعمل تسجيل دخول الأول."}, 400
-    body = request.get_json(force=True, silent=True) or {}
-    try:
-        hours = int(body.get("hours") or share_links.DEFAULT_HOURS)
-    except (TypeError, ValueError):
-        hours = share_links.DEFAULT_HOURS
-    if hours not in share_links.EXPIRY_CHOICES:
-        return {"error": "مدة غير مسموحة"}, 400
-    label = str(body.get("label") or "").strip()[:40]
-    share_links.save_owner(ctx["owner_id"], ctx["esim"], ctx["phone_auth"], ctx["device_id"],
-                           create=True)
-    try:
-        token, link = share_links.create_link(ctx["owner_id"], hours, label)
-    except ValueError:
-        return {"error": f"وصلت للحد الأقصى ({share_links.MAX_ACTIVE_LINKS}) من الروابط الشغالة. الغي رابط الأول."}, 400
-    print(f"[share-links] created id={link['id']} hours={hours}", flush=True)
-    # token goes in the #fragment: browsers never send it in requests, so it
-    # cannot end up in HTTP/proxy logs or Referer headers
-    url = url_for("share_open", _external=True) + "#" + token
-    return {"url": url, "link": _link_json(link)}
-
-
-@app.route("/api/links/<link_id>/revoke", methods=["POST"])
-def api_links_revoke(link_id):
-    ctx = _owner_ctx()
-    if not ctx:
-        return {"error": OWNER_ONLY_MSG}, 403
-    ok = share_links.revoke(ctx["owner_id"], link_id)
-    if ok:
-        print(f"[share-links] revoked id={link_id}", flush=True)
-    return ({"ok": True}, 200) if ok else ({"error": "الرابط مش موجود"}, 404)
-
-
-@app.route("/api/links/revoke-all", methods=["POST"])
-def api_links_revoke_all():
-    ctx = _owner_ctx()
-    if not ctx:
-        return {"error": OWNER_ONLY_MSG}, 403
-    return {"ok": True, "revoked": share_links.revoke_all(ctx["owner_id"])}
-
-
-@app.route("/s")
-def share_open():
-    resp = app.make_response(render_template("share_open.html", message=None))
-    resp.headers["Cache-Control"] = "no-store"
-    resp.headers["Referrer-Policy"] = "no-referrer"
-    return resp
-
-
-@app.route("/api/links/open", methods=["POST"])
-def api_links_open():
-    body = request.get_json(force=True, silent=True) or {}
-    status, row = share_links.resolve_token(str(body.get("token") or ""))
-    if status != "active":
-        return {"ok": False, "message": LINK_STATUS_AR[status]}, 410
-    owner = share_links.get_owner(row["owner_id"])
-    info = _session_info(owner["esim"]["sessionId"]) if owner and owner["esim"].get("sessionId") else None
-    if info is None:
-        return {"ok": False, "message": LINK_STATUS_AR["session"]}, 410
-    share_links.update_owner_balances(row["owner_id"], _num(info.get("remainCallPoint")),
-                                      _num(info.get("remainPoint")))
-    for key in ("user", "esimeasy", "phone_authenticated", "phone_auth_pending", "balance"):
-        session.pop(key, None)
-    session.permanent = True
-    session["link_id"] = row["id"]
-    share_links.touch(row["id"])
-    print(f"[share-links] opened id={row['id']}", flush=True)
-    return {"ok": True, "redirect": url_for("dialer")}
-
-
-# ---------- Telegram control channel + call recording ----------
-import json as _json
-
-_CONTROL_CLIENTS = {}  # call_id -> ws
-
-
-@sock.route("/ws-control")
-def ws_control(ws):
-    """Browser <-> Telegram bridge for one call. Messages are JSON.
-    Client: {type:hello, callId, number, country, label, rate, coins}
-            {type:connected} | {type:ended, duration, cost}
-            {type:ack, action, ok, state?, error?}
-            {type:ping}
-    Server: {type:cmd, action:end|hold|mute}
-    """
-    call_id = None
-    try:
-        while True:
-            raw = ws.receive()
-            if raw is None:
-                break
-            if raw == BROWSER_KEEPALIVE:
-                continue
-            try:
-                msg = _json.loads(raw) if isinstance(raw, str) else None
-            except Exception:
-                continue
-            if not isinstance(msg, dict):
-                continue
-            t = msg.get("type")
-            if t == "hello":
-                call_id = str(msg.get("callId") or "")[:40]
-                if not call_id:
-                    continue
-                _CONTROL_CLIENTS[call_id] = ws
-                ctx = _ctx() or {}
-                label = msg.get("label") or (
-                    "رابط مشترك" if ctx.get("mode") == "link" else "الحساب")
-                if ctx.get("mode") == "link" and ctx.get("link_id"):
-                    label = f"رابط {ctx['link_id'][:8]}"
-                telegram_bot.register_call(
-                    call_id, msg.get("number"), msg.get("country"), label,
-                    msg.get("rate"), msg.get("coins"))
-            elif t == "connected" and call_id:
-                telegram_bot.mark_connected(call_id)
-            elif t == "ended" and call_id:
-                telegram_bot.mark_ended(call_id, msg.get("duration"), msg.get("cost"))
-            elif t == "ack" and call_id:
-                telegram_bot.ack_cmd(call_id, msg.get("action"), bool(msg.get("ok")),
-                                    msg.get("state"), msg.get("error"))
-            elif t == "ping":
-                try:
-                    ws.send(_json.dumps({"type": "pong"}))
-                except Exception:
-                    pass
-            # Pull any pending Telegram command for this call (non-blocking poll loop)
-            if call_id:
-                # Drain with a short timeout so the receive loop stays responsive;
-                # the browser also pings, which re-enters here.
-                action = telegram_bot.next_cmd(call_id, timeout=0.01)
-                while action:
-                    try:
-                        ws.send(_json.dumps({"type": "cmd", "action": action}))
-                    except Exception:
-                        break
-                    action = telegram_bot.next_cmd(call_id, timeout=0.01)
-    finally:
-        if call_id:
-            _CONTROL_CLIENTS.pop(call_id, None)
-            # If the browser closed without an ended event, notify Telegram.
-            if call_id in telegram_bot.active_calls():
-                telegram_bot.mark_ended(call_id)
-
-
-# Background pusher: when Telegram queues a command, push it to the right socket
-# without waiting for the next browser message.
-def _control_pusher():
-    while True:
-        gevent.sleep(0.3)
-        for cid, ws in list(_CONTROL_CLIENTS.items()):
-            action = telegram_bot.next_cmd(cid, timeout=0.01)
-            while action:
-                try:
-                    ws.send(_json.dumps({"type": "cmd", "action": action}))
-                except Exception:
-                    break
-                action = telegram_bot.next_cmd(cid, timeout=0.01)
-
-gevent.spawn(_control_pusher)
-
-
-@app.route("/api/recording/toggle", methods=["POST"])
-def api_recording_toggle():
-    ctx = _ctx()
-    if not ctx or ctx["mode"] != "owner":
-        return {"error": "owner only"}, 403
-    body = request.get_json(force=True, silent=True) or {}
-    on = bool(body.get("on"))
-    share_links.set_setting(ctx["owner_id"], "recording", "1" if on else "0")
-    return {"on": on}
-
-
-@app.route("/api/recording/status")
-def api_recording_status():
-    ctx = _ctx()
-    if not ctx:
-        return {"on": False}
-    oid = ctx["owner_id"]
-    on = share_links.get_setting(oid, "recording", "0") == "1"
-    return {"on": on, "tg": telegram_bot.READY}
-
-
-@app.route("/api/recording/upload", methods=["POST"])
-def api_recording_upload():
-    """Accept a recorded call audio, send it to Telegram, then delete it."""
-    ctx = _ctx()
-    if not ctx:
-        return {"error": "not logged in"}, 401
-    f = request.files.get("audio")
-    if not f:
-        return {"error": "no audio"}, 400
-    duration = request.form.get("duration") or ""
-    number = request.form.get("number") or ""
-    country = request.form.get("country") or ""
-    os.makedirs("/tmp/recordings", exist_ok=True)
-    path = f"/tmp/recordings/{uuid.uuid4().hex}.webm"
-    try:
-        f.save(path)
-        caption = ("\U0001F399\ufe0f \u062a\u0633\u062c\u064a\u0644 \u0645\u0643\u0627\u0644\u0645\u0629\n+%s %s\n\u0627\u0644\u0645\u062f\u0629: %s" % (country, telegram_bot.mask_number(number), duration))
-        result = telegram_bot.send_audio(path, caption)
-        ok = bool(result and result.get("ok"))
-        return {"ok": ok}
-    except Exception as e:
-        print(f"[recording] upload {type(e).__name__}", flush=True)
-        return {"error": "upload failed"}, 502
-    finally:
-        try:
-            os.remove(path)
-        except Exception:
-            pass
 
 
 @app.route("/health")
 def health():
-    return {"status": "ok", "telegram": telegram_bot.ENABLED,
-            "telegramOwner": telegram_bot.OWNER_ID is not None}
+    return {"status": "ok"}
 
 
 @app.route("/rates", methods=["GET", "POST"])
