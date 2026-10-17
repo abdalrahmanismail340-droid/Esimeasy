@@ -21,10 +21,6 @@
   .hang-btn { width: 64px; height: 64px; border-radius: 50%; border: none; font-size: 26px; cursor: pointer; background: #c62828; color: #fff; display: none; }
   .status { font-size: 14px; color: #ffd54f; min-height: 22px; margin-bottom: 6px; word-break: break-word; }
   .timer { font-size: 15px; color: #81c784; min-height: 20px; direction: ltr; }
-  .log-container { margin-top: 14px; text-align: left; direction: ltr; }
-  .log-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 12px; color: #aaa; }
-  .log-header button { background: rgba(255,255,255,0.1); border: none; color: #fff; padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 10px; }
-  .sip-log { background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 8px; font-family: monospace; font-size: 11px; color: #80cbc4; height: 110px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
   .back { display: inline-block; margin-top: 12px; color: #888; text-decoration: none; font-size: 13px; }
   input.num { width: 100%; background: transparent; border: none; color: #fff; font-size: 26px; text-align: center; letter-spacing: 2px; outline: none; direction: ltr; }
 </style>
@@ -56,24 +52,12 @@
     </div>
     <div id="authMsg" style="font-size:13px; margin-top:8px;"></div>
   </div>
-  <div class="log-container">
-    <div class="log-header">
-      <span>📋 SIP Activity Log</span>
-      <button onclick="document.getElementById('sipLog').textContent='SIP Log cleared...'">Clear</button>
-    </div>
-    <div class="sip-log" id="sipLog">SIP Log: ready...</div>
-  </div>
   <a class="back" href="/">← Back</a>
 </div>
 <audio id="remoteAudio" autoplay playsinline></audio>
 
 <script>
-const sipLogEl = document.getElementById('sipLog');
-function logSip(msg) {
-  const t = new Date().toLocaleTimeString('en-US', { hour12: false });
-  sipLogEl.textContent += `\n[${t}] ${msg}`;
-  sipLogEl.scrollTop = sipLogEl.scrollHeight;
-}
+function logSip(msg) { /* removed */ }
 
 const pad = document.getElementById('pad');
 const numInput = document.getElementById('numInput');
@@ -654,7 +638,6 @@ callBtn.onclick = async () => {
   const number = raw.startsWith(detectedPrefix) ? raw.substring(detectedPrefix.length) : raw;
   setStatus('Preparing call...');
   timerEl.textContent = '';
-  sipLogEl.textContent = 'SIP Log: starting call...';
   remoteAudio.play().catch(() => {});
   callBtn.style.display = 'none';
   try {
