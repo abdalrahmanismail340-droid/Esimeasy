@@ -92,7 +92,7 @@
   <select class="picker" id="countryPicker" title="Country (for local numbers starting with 0)">
     {% for c in countries %}<option value="{{ c.code }}"{% if c.code == '20' %} selected{% endif %}>{{ c.name }} (+{{ c.code }}) — {{ c.rate }} coins/min</option>{% endfor %}
   </select>
-  <div class="display"><input class="num" id="numInput" placeholder="Phone number (010... or ‎+20...)" inputmode="tel" autocomplete="tel"><button class="bksp" id="bkspBtn" type="button" title="Clear (long-press to clear all)">⌫</button></div>
+  <div class="display"><input class="num" id="numInput" placeholder="" inputmode="tel" autocomplete="tel"><button class="bksp" id="bkspBtn" type="button" title="Clear (long-press to clear all)">⌫</button></div>
   <div class="dtmf-line" id="dtmfLine"></div>
   <div class="country" id="countryInfo"></div>
   <div class="minutes" id="minutesInfo"></div>
