@@ -431,7 +431,21 @@ def api_call_setup():
     }
 
 
+
+@app.route("/api/countries")
+def api_countries():
+    if "user" not in session:
+        return {"error": "not logged in"}, 401
+    out = []
+    for code, entries in RATES.items():
+        name, rate = entries[0]
+        out.append({"code": code, "name": name, "rate": rate})
+    out.sort(key=lambda x: x["name"])
+    return {"countries": out}
+
+
 @app.route("/api/prefix/<code>")
+
 def api_prefix(code):
     if "user" not in session:
         return {"error": "not logged in"}, 401

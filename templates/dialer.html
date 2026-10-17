@@ -12,6 +12,8 @@
   .balance { color: #81c784; font-size: 14px; margin-bottom: 14px; }
   .display { background: rgba(0,0,0,0.35); border-radius: 12px; padding: 14px; font-size: 26px; letter-spacing: 2px; min-height: 60px; margin-bottom: 8px; direction: ltr; overflow-x: auto; white-space: nowrap; }
   .country { font-size: 14px; color: #ff6b35; margin-bottom: 12px; min-height: 20px; }
+  .country-select { width: 100%; background: rgba(0,0,0,0.35); color: #fff; border: 1px solid rgba(255,255,255,0.15); border-radius: 10px; padding: 10px; font-size: 15px; margin-bottom: 10px; outline: none; }
+  .country-select option { background: #1a1a1a; }
   .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
   .pad button { font-size: 20px; padding: 10px 0; border-radius: 50%; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.06); color: #fff; cursor: pointer; aspect-ratio: 1; max-width: 68px; margin: 0 auto; width: 100%; }
   .pad button:active { background: rgba(255,255,255,0.2); }
@@ -30,6 +32,9 @@
   <h1>📞 Dialer</h1>
   <div class="balance">Balance: <b id="balance">{{ balance }}</b> coins</div>
   <div class="display"><input class="num" id="numInput" placeholder="Phone number" inputmode="tel"></div>
+  <select class="country-select" id="countrySelect">
+    <option value="">Select country...</option>
+  </select>
   <div class="country" id="countryInfo"></div>
   <div class="pad" id="pad"></div>
   <div class="actions">
@@ -72,6 +77,28 @@ numInput.addEventListener('input', detectCountry);
 numInput.addEventListener('keydown', e => { if (e.key === 'Backspace') setTimeout(detectCountry, 0); });
 
 let detectedPrefix = '';
+const countrySelect = document.getElementById('countrySelect');
+fetch('/api/countries').then(r => r.json()).then(j => {
+  (j.countries || []).forEach(c => {
+    const o = document.createElement('option');
+    o.value = c.code;
+    o.textContent = `${c.name} (+${c.code}) — ${c.rate} coins/min`;
+    o.dataset.name = c.name;
+    o.dataset.rate = c.rate;
+    countrySelect.appendChild(o);
+  });
+}).catch(() => {});
+countrySelect.addEventListener('change', () => {
+  const o = countrySelect.options[countrySelect.selectedIndex];
+  if (o && o.value) {
+    detectedPrefix = o.value;
+    document.getElementById('countryInfo').textContent =
+      `${o.dataset.name} (+${o.value}) — ${o.dataset.rate} coins/min`;
+  } else {
+    detectedPrefix = '';
+    document.getElementById('countryInfo').textContent = '';
+  }
+});
 let authSeqNo = '';
 async function requestAuthCode() {
   const v = document.getElementById('authPhone').value.replace(/\D/g, '');
@@ -142,6 +169,7 @@ async function detectCountry() {
         detectedPrefix = p;
         document.getElementById('countryInfo').textContent =
           `${info.name} (+${p}) — ${info.rate} coins/min`;
+        countrySelect.value = p;
         return;
       }
     } catch (e) {}
