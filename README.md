@@ -45,7 +45,7 @@ gunicorn app:app --bind 0.0.0.0:5000 --worker-class gevent --workers 1 --timeout
 - `/ws-monitor` — أداة تشخيص الـ WebSocket
 - `POST /api/call/setup` — بيطلب بيانات المكالمة من eSIMEasy (`call/req`)
 - `POST /api/phone-auth/req` و`/res` — توثيق رقمك بكود واتساب (إجباري قبل المكالمات)
-- `POST /api/esim/refresh` — بيجيب الرصيد من `session/info/v1`: الكوينز (C، للمكالمات) والنقاط (P). لو الجلسة انتهت بيعمل دخول تاني
+- `POST /api/esim/refresh` — بيجيب رصيد الكوينز (C، للمكالمات) من `session/info/v1`. لو الجلسة انتهت بيعمل دخول تاني
 - `POST /esim/retry` — إعادة محاولة دخول eSIMEasy
 - `/ws-proxy` — بروكسي WebSocket بين المتصفح وسيرفر الـ SIP (بيبلع رسايل الـ keepalive `__ka__` من المتصفح، وبيبعت WebSocket ping للسيرفر كل 15 ثانية)
 

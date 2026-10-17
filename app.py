@@ -462,7 +462,6 @@ def dialer():
         key=lambda c: c["name"])
     return render_template("dialer.html", user=ctx["user"],
                            balance=esim.get("remainCallPoint", 0),
-                           points=esim.get("remainPoint"),
                            countries=countries,
                            phone_authenticated=ctx["phone_auth"],
                            shared=ctx["mode"] == "link",

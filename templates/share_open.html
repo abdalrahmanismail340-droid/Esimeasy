@@ -3,18 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#062016">
+<link rel="stylesheet" href="{{ url_for('static', filename='plasma.css') }}">
 <meta name="referrer" content="no-referrer">
 <title>رابط مشترك</title>
-<style>
-  body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0f0f0f; min-height: 100vh; display: flex; align-items: center; justify-content: center; color: #fff; margin: 0; }
-  .card { background: linear-gradient(160deg, #1e1e1e, #141414); border: 1px solid #ff6b35; border-radius: 24px; padding: 36px 28px; text-align: center; max-width: 420px; width: 90%; }
-  .msg { font-size: 16px; line-height: 1.8; color: #ffb74d; }
-  a { color: #4fc3f7; }
-</style>
+<style>.msg { font-size: 16px; line-height: 1.8; color: var(--warn); }</style>
 </head>
 <body>
+{% include "_scene.html" %}
 <div class="card">
-  <h2>🔗 رابط مشترك</h2>
+  <div class="brand"><i></i> Easy Calls</div>
+  <h1>🔗 رابط <b>مشترك</b></h1>
   <div class="msg" id="msg">{% if message %}{{ message }}{% else %}⏳ جاري فتح الرابط...{% endif %}</div>
   <div style="margin-top:18px;font-size:13px;"><a href="/">الصفحة الرئيسية</a></div>
 </div>
