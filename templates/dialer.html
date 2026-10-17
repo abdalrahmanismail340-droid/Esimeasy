@@ -21,7 +21,14 @@
     box-shadow: 0 8px 18px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.2); transition: transform .08s; }
   .pad button:active { transform: translateY(2px) scale(0.96); background: radial-gradient(circle at 30% 25%, rgba(94,227,143,0.5), rgba(19,92,59,0.4) 60%); }
   .pad button small { display: block; font-size: 9px; color: var(--silver-blue); letter-spacing: .08em; }
-  .actions { display: flex; gap: 14px; justify-content: center; margin-bottom: 10px; }
+  .actions { display: flex; gap: 14px; justify-content: center; align-items: center; margin-bottom: 10px; }
+  .redial-btn { position: relative; width: 52px; height: 52px; border-radius: 50%; font-size: 20px; cursor: pointer; color: #fff;
+    border: 1px solid rgba(255,255,255,0.14); background: radial-gradient(circle at 30% 25%, rgba(255,255,255,0.22), rgba(255,255,255,0.05) 45%, rgba(0,0,0,0.25));
+    box-shadow: 0 8px 18px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.2); }
+  .redial-btn small { position: absolute; top: 56px; left: 50%; transform: translateX(-50%); font-size: 10px; color: var(--silver-blue); white-space: nowrap; direction: ltr; }
+  body.in-call .redial-btn { display: none !important; }
+  input.num::placeholder { font-size: 16px; letter-spacing: 0; }
+  .minutes { font-size: 13px; color: var(--silver); margin: -6px 0 12px; min-height: 18px; }
   .call-btn, .hang-btn { width: 70px; height: 70px; border-radius: 50%; border: none; font-size: 28px; cursor: pointer; color: #fff; }
   .call-btn { background: radial-gradient(circle at 30% 25%, #c9ffd9, #5ee38f 30%, #138a4a 75%); box-shadow: 0 14px 30px rgba(94,227,143,0.35), inset 0 -6px 12px rgba(0,0,0,0.25); }
   .hang-btn { display: none; width: auto; height: 64px; padding: 0 26px; border-radius: 999px; font-size: 17px; font-weight: 600; font-family: inherit; gap: 8px; align-items: center; justify-content: center; background: radial-gradient(circle at 30% 25%, #ffd0d0, #ff6b6b 30%, #a11d1d 75%); box-shadow: 0 14px 30px rgba(255,107,107,0.35), inset 0 -6px 12px rgba(0,0,0,0.25); }
@@ -79,6 +86,7 @@
   <div class="display"><input class="num" id="numInput" placeholder="رقم الهاتف (010... أو ‎+20...)" inputmode="tel" autocomplete="tel"><button class="bksp" id="bkspBtn" type="button" title="مسح (اضغط مطولاً لمسح الكل)">⌫</button></div>
   <div class="dtmf-line" id="dtmfLine"></div>
   <div class="country" id="countryInfo"></div>
+  <div class="minutes" id="minutesInfo"></div>
   <div class="pad" id="pad"></div>
   <div class="incall" id="inCall">
     <button class="ctl" id="muteBtn" type="button"><span class="ico">🎙️</span><span class="lbl">كتم</span></button>
@@ -88,13 +96,13 @@
   </div>
   <div class="ctl-note" id="ctlNote"></div>
   <div class="actions">
+    <button class="redial-btn" id="redialBtn" type="button" title="إعادة الاتصال بآخر رقم" style="display:none;">🔁<small id="redialNum"></small></button>
     <button class="call-btn" id="callBtn" title="اتصال">📞</button>
     <button class="hang-btn" id="hangBtn" title="إنهاء المكالمة">📵 إنهاء</button>
   </div>
   <div class="status" id="status">جاهز للاتصال</div>
   <div class="timer" id="timer"></div>
   {% if shared %}
-  <div class="auth-ok" style="{% if not phone_authenticated %}color:#ffb74d;{% endif %}">{% if phone_authenticated %}✅ رقم صاحب الحساب متوثق{% else %}⚠️ صاحب الرابط لسه موثقش رقمه — لو المكالمات اترفضت، اطلب منه يوثقه من حسابه.{% endif %}</div>
   {% else %}
   <div class="auth-ok" id="authOk" style="{% if not phone_authenticated %}display:none;{% endif %}">✅ رقمك متوثق — <a onclick="showAuthBox()">توثيق رقم تاني</a></div>
   <div class="auth-box" id="authBox" style="margin:10px 0; padding:12px; border:1px dashed #ffb74d; border-radius:10px;{% if phone_authenticated %} display:none;{% endif %}">
@@ -276,11 +284,22 @@ let parsedTarget = null;
 function detectCountry() {
   parsedTarget = parseNumber(numInput.value);
   const el = document.getElementById('countryInfo');
+  updateMinutes();
   if (!parsedTarget) { el.textContent = ''; return; }
   const c = COUNTRY_BY_CODE[parsedTarget.cc];
   el.textContent = c
     ? `${c.name} (+${parsedTarget.cc}) — ${c.rate} عملة/دقيقة${parsedTarget.local ? ' • رقم محلي' : ''}`
     : `+${parsedTarget.cc}`;
+}
+// how many minutes the coins cover for the selected / detected country
+function updateMinutes() {
+  const out = document.getElementById('minutesInfo');
+  const cc = parsedTarget ? parsedTarget.cc : picker.value;
+  const c = COUNTRY_BY_CODE[cc];
+  const coins = parseFloat(String(document.getElementById('balance').textContent).replace(/[^\d.\-]/g, ''));
+  if (!c || !c.rate || isNaN(coins)) { out.textContent = ''; return; }
+  const mins = Math.floor(coins / c.rate);
+  out.textContent = mins >= 1 ? `⏱️ رصيدك يكفي ~${mins} دقيقة لـ ${c.name}` : `⚠️ رصيدك مش كفاية لدقيقة واحدة لـ ${c.name} (${c.rate} C/دقيقة)`;
 }
 detectCountry();
 
@@ -292,6 +311,7 @@ function currentCoins() {
 }
 function showBalances(info) {
   if (info && info.coins !== undefined && info.coins !== null) balanceEl.textContent = info.coins;
+  updateMinutes();
 }
 // networkTp like the official app: NT0001 Wi-Fi, NT0003 mobile data (NT0001 when unknown)
 function networkTp() {
@@ -307,6 +327,7 @@ async function refreshBalance() {
     const j = await r.json();
     if (r.ok) {
       balanceEl.textContent = j.coins;
+      updateMinutes();
       return true;
     }
     logSip('Balance refresh failed: ' + (j.error || r.status));
@@ -1176,9 +1197,36 @@ window.addEventListener('beforeunload', () => {
   }
 });
 
+// ---------- redial: last number per browser ----------
+const LAST_KEY = 'easycalls.lastNumber';
+const redialBtn = document.getElementById('redialBtn');
+function getLast() { try { const v = JSON.parse(localStorage.getItem(LAST_KEY) || 'null'); return v && v.raw ? v : null; } catch (e) { return null; } }
+function saveLast(raw, cc) { try { localStorage.setItem(LAST_KEY, JSON.stringify({ raw, cc })); } catch (e) {} showRedial(); }
+function showRedial() {
+  const last = getLast();
+  redialBtn.style.display = last ? '' : 'none';
+  document.getElementById('redialNum').textContent = last ? last.raw : '';
+}
+function loadLast() {
+  const last = getLast();
+  if (!last) return false;
+  if (last.cc && COUNTRY_BY_CODE[last.cc]) picker.value = last.cc;
+  numInput.value = last.raw;
+  detectCountry();
+  return true;
+}
+redialBtn.onclick = () => {
+  if (!uiEnded || callBtn.style.display === 'none') return;   // a call is already starting
+  if (loadLast()) callBtn.click();
+};
+showRedial();
+
 callBtn.onclick = async () => {
+  if (!uiEnded || callBtn.style.display === 'none') return;
+  if (!numInput.value.trim() && loadLast()) { setStatus('ده آخر رقم اتصلت بيه — دوس اتصال تاني 📞'); return; }
   const target = parseNumber(numInput.value);
   if (!target || !target.national) { setStatus('اكتب الرقم الأول'); return; }
+  saveLast(numInput.value.trim(), picker.value);
   const country = COUNTRY_BY_CODE[target.cc];
   const coins = currentCoins();
   if (country && coins !== null && coins < country.rate) {
