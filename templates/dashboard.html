@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>الرئيسية</title>
+<title>Home</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0f0f0f; min-height: 100vh; display: flex; align-items: center; justify-content: center; color: #fff; }
@@ -24,16 +24,16 @@
 <body>
   <div class="card">
     {% if user.picture %}<img class="avatar" src="{{ user.picture }}" alt="">{% endif %}
-    <h1>أهلاً {{ user.name }} 👋</h1>
+    <h1>Welcome {{ user.name }} 👋</h1>
     <div class="email">{{ user.email }}</div>
     {% if esim and esim.sessionId %}
-    <div class="box ok">✅ متصل<br>الرصيد: <b>{{ esim.remainCallPoint }}</b> عملة</div>
-    <a class="btn call" href="/dialer">📞 الدايلر — مكالمة حقيقية</a>
-    <a class="btn out" href="/ws-monitor" style="color:#4fc3f7;border-color:#4fc3f755;">🔍 مراقب الـ WebSocket</a>
+    <div class="box ok">✅ Connected<br>Balance: <b>{{ esim.remainCallPoint }}</b> coins</div>
+    <a class="btn call" href="/dialer">📞 Dialer — Real Call</a>
+    <a class="btn out" href="/ws-monitor" style="color:#4fc3f7;border-color:#4fc3f755;">🔍 WebSocket Monitor</a>
     {% else %}
-    <div class="box warn">⚠️ مش متصل{% if esim and esim._error %}<br><span style="font-size:12px;direction:ltr;">debug: {{ esim._error }}</span>{% endif %}</div>
+    <div class="box warn">⚠️ Not connected{% if esim and esim._error %}<br><span style="font-size:12px;direction:ltr;">debug: {{ esim._error }}</span>{% endif %}</div>
     {% endif %}
-    <a class="btn out" href="/logout">تسجيل الخروج</a>
+    <a class="btn out" href="/logout">Log out</a>
   </div>
 </body>
 </html>
