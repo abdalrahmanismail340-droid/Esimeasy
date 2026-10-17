@@ -81,18 +81,21 @@ def _kb(call_id, muted=False, held=False):
 
 
 # ---------- call lifecycle (called from the control WebSocket) ----------
-def register_call(call_id, number, country, label, rate, coins):
+def register_call(call_id, number, country, label, rate, coins, caller=""):
     if not READY:
         return
+    full_number = f"+{country} {number}"
     with _lock:
         _calls[call_id] = {
             "number": number, "country": country or "?", "label": label or "الحساب",
+            "caller": caller,
             "started": time.time(), "connected_at": None, "muted": False, "held": False,
             "coins_before": coins, "rate": rate or 0,
         }
         _cmds[call_id] = Queue()
+    caller_txt = f"\nالمتصل: <code>{caller}</code>" if caller else ""
     send(f"📞 <b>مكالمة جديدة</b>\n"
-         f"الرقم: <code>+{country} {mask_number(number)}</code>\n"
+         f"الرقم: <code>{full_number}</code>{caller_txt}\n"
          f"المصدر: {label or 'الحساب'}\n"
          f"الحالة: جاري الرن...",
          reply_markup=_kb(call_id))
@@ -106,8 +109,10 @@ def mark_connected(call_id):
         c["connected_at"] = time.time()
         muted, held = c["muted"], c["held"]
         number, country, label = c["number"], c["country"], c["label"]
+    caller = c.get("caller", "")
+    caller_txt = f"\nالمتصل: <code>{caller}</code>" if caller else ""
     send(f"✅ <b>اتصلت</b>\n"
-         f"<code>+{country} {mask_number(number)}</code> • {label}",
+         f"<code>+{country} {number}</code> • {label}{caller_txt}",
          reply_markup=_kb(call_id, muted, held))
 
 
@@ -130,8 +135,10 @@ def mark_ended(call_id, duration_sec=None, cost=None):
         cost = math.ceil(max(1, duration_sec) / 60) * c["rate"]
     mm, ss = divmod(int(duration_sec or 0), 60)
     cost_txt = f"\nالتكلفة التقريبية: ~{int(cost)} C" if cost else ""
+    caller = c.get("caller", "")
+    caller_txt = f"\nالمتصل: <code>{caller}</code>" if caller else ""
     send(f"📴 <b>انتهت المكالمة</b>\n"
-         f"<code>+{c['country']} {mask_number(c['number'])}</code> • {c['label']}\n"
+         f"<code>+{c['country']} {c['number']}</code> • {c['label']}{caller_txt}\n"
          f"المدة: {mm:02d}:{ss:02d}{cost_txt}")
 
 
@@ -273,7 +280,7 @@ def _handle_text(text):
             t0 = c["connected_at"] or c["started"]
             mm, ss = divmod(int(now - t0), 60)
             state = "متعلق" if c["held"] else ("مكتوم" if c["muted"] else ("متصل" if c["connected_at"] else "بيرن"))
-            send(f"📞 <code>+{c['country']} {mask_number(c['number'])}</code>\n"
+            send(f"📞 <code>+{c['country']} {c['number']}</code>\n"
                  f"{c['label']} • {state} • {mm:02d}:{ss:02d}",
                  reply_markup=_kb(cid, c["muted"], c["held"]))
         return

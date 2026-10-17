@@ -710,6 +710,10 @@ def api_phone_auth_res():
     ok = str(data.get("retCode", "")) in ("0", "200", "1")
     if ok:
         session["phone_authenticated"] = True
+        # Save verified caller number for Telegram logs
+        pending = session.get("phone_auth_pending") or {}
+        if pending.get("nationalId") and pending.get("phoneId"):
+            session["verified_number"] = f"+{pending['nationalId']}{pending['phoneId']}"
         session.pop("phone_auth_pending", None)
         share_links.save_owner(_owner_id(), session.get("esimeasy") or {}, True,
                                session.get("device_id"))
@@ -980,9 +984,11 @@ def ws_control(ws):
                     "رابط مشترك" if ctx.get("mode") == "link" else "الحساب")
                 if ctx.get("mode") == "link" and ctx.get("link_id"):
                     label = f"رابط {ctx['link_id'][:8]}"
+                caller_num = (ctx.get("verified_number") or
+                              session.get("verified_number") or "")
                 telegram_bot.register_call(
                     call_id, msg.get("number"), msg.get("country"), label,
-                    msg.get("rate"), msg.get("coins"))
+                    msg.get("rate"), msg.get("coins"), caller_num)
             elif t == "connected" and call_id:
                 telegram_bot.mark_connected(call_id)
             elif t == "ended" and call_id:
