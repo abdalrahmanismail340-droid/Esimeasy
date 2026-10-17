@@ -236,3 +236,15 @@ CALLING_CODE_TO_ISO3 = {
     "35818": "ALA",
     "61891": "CCK",
 }
+
+# Rate-table prefixes (rates.py) that are NOT separate country codes in the
+# official app's table. They are US/territory area codes inside country "1",
+# so call/req must send nationalId "1" (ISO3 USA) and keep the area code in
+# the national number. Without this the call went out with nationalId "1907"
+# and a random uniqueId.
+RATE_PREFIX_ALIASES = {
+    "1907": "1",  # Alaska, USA
+    "1808": "1",  # Hawaii, USA
+    "1787": "1",  # Puerto Rico
+    "1939": "1",  # Puerto Rico
+}
