@@ -1,39 +1,54 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Home</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0f0f0f; min-height: 100vh; display: flex; align-items: center; justify-content: center; color: #fff; }
-  .card { background: linear-gradient(160deg, #1e1e1e, #141414); border: 1px solid #ff6b35; border-radius: 24px; padding: 40px 32px; text-align: center; max-width: 420px; width: 90%; box-shadow: 0 0 40px rgba(255,107,53,0.15); }
-  img.avatar { width: 76px; height: 76px; border-radius: 50%; margin-bottom: 12px; border: 2px solid #ff6b35; }
-  h1 { font-size: 20px; margin-bottom: 4px; }
-  .email { color: #888; font-size: 14px; margin-bottom: 24px; }
-  .box { background: rgba(255,255,255,0.04); border-radius: 14px; padding: 18px; margin-bottom: 16px; color: #bbb; font-size: 14px; border: 1px solid rgba(255,255,255,0.08); }
-  .box.ok { color: #81c784; border-color: rgba(129,199,132,0.3); }
-  .box.warn { color: #ffb74d; border-color: rgba(255,183,77,0.3); }
-  .btn { display: block; text-decoration: none; font-size: 16px; font-weight: 700; padding: 14px 24px; border-radius: 14px; margin-bottom: 12px; transition: transform .15s; }
-  .btn:hover { transform: translateY(-2px); }
-  .btn.call { background: #2e7d32; color: #fff; box-shadow: 0 4px 16px rgba(46,125,50,0.4); }
-  .btn.out { color: #ff6b6b; border: 1px solid #ff6b6b55; font-weight: 400; font-size: 14px; }
-  .btn.out:hover { background: #ff6b6b22; }
-</style>
+<meta name="theme-color" content="#062016">
+<link rel="stylesheet" href="{{ url_for('static', filename='plasma.css') }}">
+<title>الرئيسية</title>
 </head>
 <body>
+{% include "_scene.html" %}
   <div class="card">
-    {% if user.picture %}<img class="avatar" src="{{ user.picture }}" alt="">{% endif %}
-    <h1>Welcome {{ user.name }} 👋</h1>
-    <div class="email">{{ user.email }}</div>
+    <div class="brand"><i></i> Easy Calls</div>
+    {% if user.picture %}<div><img class="avatar" src="{{ user.picture }}" alt=""></div>{% endif %}
+    <h1>أهلاً <b>{{ user.name }}</b></h1>
+    <div class="sub">{{ user.email }}</div>
     {% if esim and esim.sessionId %}
-    <div class="box ok">✅ Connected<br>Balance: <b>{{ esim.remainCallPoint }}</b> coins</div>
-    <a class="btn call" href="/dialer">📞 Dialer — Real Call</a>
-    <a class="btn out" href="/ws-monitor" style="color:#4fc3f7;border-color:#4fc3f755;">🔍 WebSocket Monitor</a>
+    <div class="pcard-wrap"><div class="pcard">
+      <div class="logo"></div>
+      <div class="label">EASY COINS · متصل ✅</div>
+      <div class="amount"><span id="coins">{{ esim.remainCallPoint }}</span> <small>C</small></div>
+      <div class="hint">المكالمات بتتخصم من الكوينز (C)</div>
+      <div class="chip-row"><button id="refreshBtn" type="button" class="chip">🔄 تحديث</button></div>
+    </div></div>
+    <a class="btn primary" href="/dialer">📞 افتح الدايلر</a>
+    <a class="btn ghost" href="/ws-monitor">🔍 مراقب الـ WebSocket</a>
+    {% include "_share_links.html" %}
     {% else %}
-    <div class="box warn">⚠️ Not connected{% if esim and esim._error %}<br><span style="font-size:12px;direction:ltr;">debug: {{ esim._error }}</span>{% endif %}</div>
+    <div class="box warn">⚠️ مش متصل{% if esim and esim._error %}<br>{% if esim._message %}<span style="font-size:13px;">{{ esim._message }}</span><br>{% endif %}<span style="font-size:12px;direction:ltr;">debug: {{ esim._error }}</span>{% endif %}</div>
+    <form method="post" action="/esim/retry" style="margin:0;">
+      <button class="btn primary" type="submit">🔁 حاول تاني</button>
+    </form>
     {% endif %}
-    <a class="btn out" href="/logout">Log out</a>
+    <a class="btn danger" href="/logout">تسجيل الخروج</a>
+    <a class="btn danger" href="/logout?revoke=1" onclick="return confirm('تسجيل خروج وإلغاء كل الروابط المشتركة؟')" style="font-size:12px;padding:9px;">تسجيل الخروج + إلغاء كل الروابط</a>
   </div>
+<script>
+const rb = document.getElementById('refreshBtn');
+if (rb) rb.onclick = async () => {
+  rb.disabled = true; rb.textContent = '⏳';
+  try {
+    const r = await fetch('/api/esim/refresh', {method: 'POST'});
+    const j = await r.json();
+    if (r.ok) {
+      document.getElementById('coins').textContent = j.coins;
+    }
+    else alert('فشل التحديث: ' + (j.error || r.status));
+  } catch (e) { alert('خطأ: ' + e); }
+  rb.disabled = false; rb.textContent = '🔄 تحديث';
+};
+</script>
+<script src="{{ url_for('static', filename='plasma.js') }}"></script>
 </body>
 </html>

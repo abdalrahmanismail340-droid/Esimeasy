@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>WebSocket/SIP Connection Monitor</title>
+<title>مراقب اتصال WebSocket/SIP</title>
 <style>
   :root{
     --bg:#0e1117; --surface:#161b22; --border:#2a3038; --text:#e6e9ef;
@@ -74,8 +74,8 @@
 </head>
 <body>
 <header>
-  <h1>WebSocket Connection Monitor (SIP Signaling)</h1>
-  <p class="sub">Logs connection time, close codes, and keepalive pings to diagnose signal drops.</p>
+  <h1>مراقب اتصال WebSocket (SIP Signaling)</h1>
+  <p class="sub">يسجل وقت الاتصال، أكواد القطع، ونبضات keepalive لتشخيص انقطاع الإشارة.</p>
 </header>
 
 <div class="panel">
@@ -85,40 +85,40 @@
   </div>
   <div class="row">
     <div>
-      <label>OPTIONS text (keepalive payload)</label>
-      <input type="text" id="pingPayload" value="OPTIONS keepalive" placeholder="Will be sent as raw text">
+      <label>نص الـ OPTIONS (keepalive payload)</label>
+      <input type="text" id="pingPayload" value="OPTIONS keepalive" placeholder="سيتم إرساله كنص خام">
     </div>
     <div>
-      <label>Ping interval (seconds)</label>
+      <label>الفاصل بين النبضات (ثانية)</label>
       <input type="number" id="pingInterval" value="10" min="1">
     </div>
   </div>
   <div class="controls">
-    <button class="primary" id="btnConnect">Connect</button>
-    <button class="danger" id="btnDisconnect" disabled>Disconnect</button>
-    <button id="btnClear">Clear Log</button>
-    <button id="btnExport">Export Log</button>
+    <button class="primary" id="btnConnect">اتصال</button>
+    <button class="danger" id="btnDisconnect" disabled>قطع الاتصال</button>
+    <button id="btnClear">مسح السجل</button>
+    <button id="btnExport">تصدير السجل</button>
   </div>
 </div>
 
 <div class="status-bar">
-  <span>Status: <span class="dot" id="statusDot"></span><b id="statusText">Disconnected</b></span>
-  <span>Current connection duration: <b id="uptime">00:00</b></span>
-  <span>Drop count: <b id="dropCount">0</b></span>
-  <span>Last close code: <b id="lastClose">—</b></span>
+  <span>الحالة: <span class="dot" id="statusDot"></span><b id="statusText">غير متصل</b></span>
+  <span>مدة الاتصال الحالي: <b id="uptime">00:00</b></span>
+  <span>عدد الانقطاعات: <b id="dropCount">0</b></span>
+  <span>آخر كود إغلاق: <b id="lastClose">—</b></span>
 </div>
 
 <main>
-  <div class="log" id="log">Ready. Enter the WSS URL for SIP signaling then press Connect.
-Important note: browsers do not easily allow sending real SIP OPTIONS over raw-text WebSocket in all cases,
-but this tool sends the keepalive text as-is and monitors server responses and close codes (1000/1005/1006/1011)
-to see whether drops happen despite the pings or the pings themselves fail.</div>
+  <div class="log" id="log">جاهز. أدخل رابط الـ WSS الخاص بالـ SIP signaling ثم اضغط اتصال.
+ملاحظة مهمة: المتصفحات لا تسمح بإرسال SIP OPTIONS حقيقي عبر WebSocket نص خام بسهولة في كل الحالات،
+لكن هذه الأداة ترسل نص الـ keepalive كما هو وتراقب استجابة السيرفر وأكواد القطع (1000/1005/1006/1011)
+لمعرفة هل الانقطاع يحدث رغم النبضات أم أن النبضات نفسها تفشل.</div>
 </main>
 
 <p class="footer-note">
-  Code 1006 = abnormal closure (no close frame) — usually network or a timeout from a proxy like Railway.
-  Code 1005 = no status code sent. Code 1000 = normal, expected closure.
-  Compare drop timings here with 603 timings to see if the two are related.
+  كود 1006 = إغلاق غير طبيعي (لا close frame) — عادة بسبب الشبكة أو timeout من وسيط مثل Railway.
+  كود 1005 = لا يوجد status code مُرسل. كود 1000 = إغلاق طبيعي ومتوقع.
+  قارن توقيت الانقطاعات هنا مع توقيت 603 لمعرفة إن كان الطرفان مرتبطين.
 </p>
 
 <script>
@@ -171,14 +171,14 @@ function stopUptime(){
 
 function connect(){
   const url = el('wsUrl').value.trim();
-  if(!url){ logLine('Please enter a valid WSS URL.', 'l-err'); return; }
+  if(!url){ logLine('الرجاء إدخال رابط WSS صحيح.', 'l-err'); return; }
   try{
-    setStatus('connecting','Connecting...');
-    logLine(`Connecting to ${url}`, 'l-info');
+    setStatus('connecting','جاري الاتصال...');
+    logLine(`محاولة اتصال بـ ${url}`, 'l-info');
     ws = new WebSocket(url);
   }catch(e){
-    logLine('WebSocket creation failed: ' + e.message, 'l-err');
-    setStatus('closed','Error');
+    logLine('فشل إنشاء WebSocket: ' + e.message, 'l-err');
+    setStatus('closed','خطأ');
     return;
   }
 
@@ -186,36 +186,36 @@ function connect(){
   el('btnDisconnect').disabled = false;
 
   ws.onopen = () => {
-    logLine('✅ Connection open (onopen)', 'l-open');
-    setStatus('open','Connected');
+    logLine('✅ الاتصال مفتوح (onopen)', 'l-open');
+    setStatus('open','متصل');
     startUptime();
     const interval = Math.max(1, Number(el('pingInterval').value || 10)) * 1000;
     pingTimer = setInterval(()=>{
       const payload = el('pingPayload').value || 'ping';
       try{
         ws.send(payload);
-        logLine(`→ keepalive sent: "${payload}"`, 'l-ping');
+        logLine(`→ أُرسل keepalive: "${payload}"`, 'l-ping');
       }catch(e){
-        logLine('keepalive send failed: ' + e.message, 'l-err');
+        logLine('فشل إرسال keepalive: ' + e.message, 'l-err');
       }
     }, interval);
   };
 
   ws.onmessage = (evt) => {
     const data = typeof evt.data === 'string' ? evt.data : '[binary frame]';
-    logLine('← received: ' + data.slice(0,200), 'l-info');
+    logLine('← استقبال: ' + data.slice(0,200), 'l-info');
   };
 
   ws.onerror = () => {
-    logLine('⚠ WebSocket error (onerror)', 'l-err');
+    logLine('⚠ حدث خطأ في الـ WebSocket (onerror)', 'l-err');
   };
 
   ws.onclose = (evt) => {
     dropCount++;
     el('dropCount').textContent = dropCount;
-    el('lastClose').textContent = `${evt.code} / ${evt.reason || 'no reason'} / clean=${evt.wasClean}`;
-    logLine(`❌ Connection dropped. code=${evt.code} reason="${evt.reason}" wasClean=${evt.wasClean} — duration before drop: ${fmtUptime(Date.now()-connectStart)}`, 'l-close');
-    setStatus('closed','Dropped');
+    el('lastClose').textContent = `${evt.code} / ${evt.reason || 'بدون سبب'} / clean=${evt.wasClean}`;
+    logLine(`❌ الاتصال انقطع. code=${evt.code} reason="${evt.reason}" wasClean=${evt.wasClean} — المدة قبل الانقطاع: ${fmtUptime(Date.now()-connectStart)}`, 'l-close');
+    setStatus('closed','منقطع');
     stopUptime();
     clearInterval(pingTimer);
     el('btnConnect').disabled = false;

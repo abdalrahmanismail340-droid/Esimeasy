@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Call Rates</title>
+<title>أسعار المكالمات</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Segoe UI', Tahoma, sans-serif; background: linear-gradient(135deg, #1a1a2e, #16213e); min-height: 100vh; color: #fff; padding: 24px 16px; }
@@ -29,19 +29,19 @@
 </head>
 <body>
 <div class="wrap">
-  <a class="back" href="/">← Back</a>
-  <h1>💰 Call Rates</h1>
+  <a class="back" href="/">← رجوع</a>
+  <h1>💰 أسعار المكالمات</h1>
   <form method="post">
-    <label>Your coin balance {% if balance_auto %}(auto from your account ✅){% else %}(manual){% endif %}</label>
+    <label>رصيدك من العملات {% if balance_auto %}(تلقائي من حسابك ✅){% else %}(يدوي){% endif %}</label>
     <input type="number" name="balance" placeholder="{{ balance }}" min="0">
-    <label>Country code, name, or number start (e.g. 20 or 201012345678)</label>
+    <label>كود الدولة أو اسمها أو أول الرقم (مثال: 20 أو 201012345678)</label>
     <input type="text" name="code" placeholder="201012345678" value="{{ result.query if result else '' }}">
-    <button type="submit">Check Price</button>
+    <button type="submit">اعرف السعر</button>
   </form>
   {% if result %}
-    <div class="bal">Your balance: <b>{{ result.balance }}</b> coins</div>
+    <div class="bal">رصيدك: <b>{{ result.balance }}</b> عملة</div>
     {% if result.detected_from_number %}
-    <div class="bal">📞 Country code detected from number: <b dir="ltr">+{{ result.detected_from_number }}</b></div>
+    <div class="bal">📞 كود الدولة المكتشف من الرقم: <b dir="ltr">+{{ result.detected_from_number }}</b></div>
     {% endif %}
     {% if result.matches %}
       {% for m in result.matches %}
@@ -51,13 +51,13 @@
           <div class="code">+{{ m.code }}</div>
         </div>
         <div class="rate">
-          <b>{{ m.rate }}</b><span>coins / min</span>
-          <span class="mins">≈ {{ m.minutes }} min with your balance</span>
+          <b>{{ m.rate }}</b><span>عملة / دقيقة</span>
+          <span class="mins">≈ {{ m.minutes }} دقيقة برصيدك</span>
         </div>
       </div>
       {% endfor %}
     {% else %}
-      <div class="empty">No results for "{{ result.query }}" — try another code</div>
+      <div class="empty">مفيش نتايج لـ "{{ result.query }}" — جرب كود تاني</div>
     {% endif %}
   {% endif %}
 </div>

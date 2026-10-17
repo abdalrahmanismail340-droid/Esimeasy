@@ -1,145 +1,395 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dialer — Real Call</title>
+<title>الدايلر — مكالمة حقيقية</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='plasma.css') }}">
+<meta name="theme-color" content="#062016">
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0f0f0f; min-height: 100vh; display: flex; align-items: center; justify-content: center; color: #fff; padding: 16px 0; }
-  .card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 20px; padding: 24px 20px; text-align: center; max-width: 440px; width: 95%; }
-  h1 { font-size: 20px; margin-bottom: 6px; }
-  .balance { color: #81c784; font-size: 14px; margin-bottom: 14px; }
-  .display { background: rgba(0,0,0,0.35); border-radius: 12px; padding: 14px; font-size: 26px; letter-spacing: 2px; min-height: 60px; margin-bottom: 8px; direction: ltr; overflow-x: auto; white-space: nowrap; }
-  .country { font-size: 14px; color: #ff6b35; margin-bottom: 12px; min-height: 20px; }
-  .country-select { width: 100%; background: rgba(0,0,0,0.35); color: #fff; border: 1px solid rgba(255,255,255,0.15); border-radius: 10px; padding: 10px; font-size: 15px; margin-bottom: 10px; outline: none; }
-  .country-select option { background: #1a1a1a; }
-  .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
-  .pad button { font-size: 20px; padding: 10px 0; border-radius: 50%; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.06); color: #fff; cursor: pointer; aspect-ratio: 1; max-width: 68px; margin: 0 auto; width: 100%; }
-  .pad button:active { background: rgba(255,255,255,0.2); }
-  .pad button small { display: block; font-size: 9px; color: #888; }
-  .actions { display: flex; gap: 12px; justify-content: center; margin-bottom: 10px; }
-  .call-btn { width: 64px; height: 64px; border-radius: 50%; border: none; font-size: 26px; cursor: pointer; background: #2e7d32; color: #fff; }
-  .hang-btn { width: 64px; height: 64px; border-radius: 50%; border: none; font-size: 26px; cursor: pointer; background: #c62828; color: #fff; display: none; }
-  .status { font-size: 14px; color: #ffd54f; min-height: 22px; margin-bottom: 6px; word-break: break-word; }
-  .timer { font-size: 15px; color: #81c784; min-height: 20px; direction: ltr; }
-  .back { display: inline-block; margin-top: 12px; color: #888; text-decoration: none; font-size: 13px; }
-  input.num { width: 100%; background: transparent; border: none; color: #fff; font-size: 26px; text-align: center; letter-spacing: 2px; outline: none; direction: ltr; }
+  body { align-items: flex-start; padding: 18px 0 30px; }
+  .card { padding: 22px 18px 18px; }
+  h1 { font-size: 22px; margin-bottom: 12px; }
+  .pcard { min-height: 128px; }
+  .pcard .amount { font-size: 36px; }
+  .display { background: rgba(0,0,0,0.38); border: 1px solid var(--glass-b); border-radius: 20px; padding: 12px; min-height: 58px; margin-bottom: 8px; direction: ltr; overflow-x: auto; white-space: nowrap; box-shadow: inset 0 6px 16px rgba(0,0,0,0.45); }
+  .country { font-size: 14px; color: var(--accent); margin-bottom: 12px; min-height: 20px; }
+  .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; direction: ltr; }
+  .pad button { font-family: inherit; font-size: 22px; font-weight: 400; border-radius: 50%; aspect-ratio: 1; max-width: 70px; width: 100%; margin: 0 auto; cursor: pointer; color: #fff;
+    border: 1px solid rgba(255,255,255,0.14);
+    background: radial-gradient(circle at 30% 25%, rgba(255,255,255,0.22), rgba(255,255,255,0.05) 45%, rgba(0,0,0,0.25));
+    box-shadow: 0 8px 18px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.2); transition: transform .08s; }
+  .pad button:active { transform: translateY(2px) scale(0.96); background: radial-gradient(circle at 30% 25%, rgba(94,227,143,0.5), rgba(19,92,59,0.4) 60%); }
+  .pad button small { display: block; font-size: 9px; color: var(--silver-blue); letter-spacing: .08em; }
+  .actions { display: flex; gap: 14px; justify-content: center; align-items: center; margin-bottom: 10px; }
+  .redial-btn { position: relative; width: 52px; height: 52px; border-radius: 50%; font-size: 20px; cursor: pointer; color: #fff;
+    border: 1px solid rgba(255,255,255,0.14); background: radial-gradient(circle at 30% 25%, rgba(255,255,255,0.22), rgba(255,255,255,0.05) 45%, rgba(0,0,0,0.25));
+    box-shadow: 0 8px 18px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.2); }
+  .redial-btn small { position: absolute; top: 56px; left: 50%; transform: translateX(-50%); font-size: 10px; color: var(--silver-blue); white-space: nowrap; direction: ltr; }
+  body.in-call .redial-btn { display: none !important; }
+  input.num::placeholder { font-size: 16px; letter-spacing: 0; }
+  .minutes { font-size: 13px; color: var(--silver); margin: -6px 0 12px; min-height: 18px; }
+  .call-btn, .hang-btn { width: 70px; height: 70px; border-radius: 50%; border: none; font-size: 28px; cursor: pointer; color: #fff; }
+  .call-btn { background: radial-gradient(circle at 30% 25%, #c9ffd9, #5ee38f 30%, #138a4a 75%); box-shadow: 0 14px 30px rgba(94,227,143,0.35), inset 0 -6px 12px rgba(0,0,0,0.25); }
+  .hang-btn { display: none; width: auto; height: 64px; padding: 0 26px; border-radius: 999px; font-size: 17px; font-weight: 600; font-family: inherit; gap: 8px; align-items: center; justify-content: center; background: radial-gradient(circle at 30% 25%, #ffd0d0, #ff6b6b 30%, #a11d1d 75%); box-shadow: 0 14px 30px rgba(255,107,107,0.35), inset 0 -6px 12px rgba(0,0,0,0.25); }
+  .status { font-size: 14px; color: var(--warn); min-height: 22px; margin-bottom: 6px; word-break: break-word; }
+  .timer { font-size: 16px; color: var(--accent); min-height: 20px; direction: ltr; }
+  .log-container { margin-top: 14px; text-align: left; direction: ltr; }
+  .log-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 12px; color: var(--silver-blue); }
+  .log-header button { background: rgba(255,255,255,0.08); border: 1px solid var(--glass-b); color: #fff; padding: 2px 10px; border-radius: 999px; cursor: pointer; font-size: 10px; }
+  .sip-log { background: rgba(0,0,0,0.5); border: 1px solid var(--glass-b); border-radius: 14px; padding: 8px; font-family: ui-monospace, monospace; font-size: 11px; color: #8fd9b0; height: 110px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+  .back { display: inline-block; margin-top: 14px; color: var(--silver-blue); text-decoration: none; font-size: 13px; }
+  input.num { width: 100%; background: transparent; border: none; color: #fff; font-size: 26px; text-align: center; letter-spacing: 2px; outline: none; direction: ltr; font-family: inherit; }
+  select.picker { width: 100%; background: rgba(0,0,0,0.38); color: #fff; border: 1px solid var(--glass-b); border-radius: 999px; padding: 10px 14px; font-size: 14px; margin-bottom: 10px; }
+  .auth-ok { font-size: 13px; color: var(--accent); margin: 8px 0; }
+  .auth-ok a { color: var(--warn); cursor: pointer; text-decoration: underline; }
+  .auth-box button { font-family: inherit; background: var(--accent); color: var(--accent-ink); border: none; border-radius: 999px; padding: 10px; font-weight: 600; cursor: pointer; }
+  .auth-box input.num { background: rgba(0,0,0,0.35); border-radius: 999px; font-size: 18px; padding: 8px; }
+  .incall { display: none; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 6px 0 16px; }
+  .incall.on { display: grid; }
+  .ctl { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: var(--silver); background: none; border: none; cursor: pointer; font-family: inherit; }
+  .ctl .ico { width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px;
+    border: 1px solid rgba(255,255,255,0.14);
+    background: radial-gradient(circle at 30% 25%, rgba(255,255,255,0.22), rgba(255,255,255,0.05) 45%, rgba(0,0,0,0.25));
+    box-shadow: 0 8px 18px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.2); transition: transform .08s, background .15s; }
+  .ctl:active .ico { transform: translateY(2px) scale(0.96); }
+  .ctl.active .ico { background: radial-gradient(circle at 30% 25%, #e9fff3, #5ee38f 35%, #138a4a 80%); color: var(--accent-ink); box-shadow: 0 10px 24px rgba(94,227,143,0.35); }
+  .ctl.warn.active .ico { background: radial-gradient(circle at 30% 25%, #fff3d6, #ffd27a 35%, #a8741c 80%); }
+  .ctl:disabled { opacity: 0.4; cursor: default; }
+  .ctl-note { font-size: 11px; color: #7f938a; min-height: 14px; margin: -8px 0 10px; }
+  body.in-call #pad, body.in-call #countryPicker { display: none; }
+  body.in-call.show-pad #pad { display: grid; }
+  .display { display: flex; align-items: center; gap: 6px; }
+  .bksp { flex: none; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--glass-b); background: rgba(255,255,255,0.06); color: var(--silver); font-size: 20px; cursor: pointer; touch-action: manipulation; }
+  .bksp:active { transform: scale(0.94); }
+  .pad button { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+  .dtmf-line { font-size: 18px; letter-spacing: 3px; color: var(--accent); direction: ltr; min-height: 0; margin-bottom: 6px; }
+  .dtmf-line:empty { display: none; }
+  .rec-banner { display: none; margin: 8px 0; padding: 8px 12px; border-radius: 999px;
+    background: rgba(255,80,80,0.15); border: 1px solid rgba(255,80,80,0.45); color: #ff8a80;
+    font-size: 13px; font-weight: 600; }
+  .rec-banner.on { display: inline-block; }
+  .rec-toggle { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    margin: 10px 0; padding: 10px 14px; border-radius: 14px; background: rgba(255,255,255,0.04);
+    border: 1px solid var(--glass-b); font-size: 13px; color: var(--silver); }
+  .rec-toggle button { font-family: inherit; }
 </style>
 </head>
 <body>
+{% include "_scene.html" %}
 <div class="card">
-  <h1>📞 Dialer</h1>
-  <div class="balance">Balance: <b id="balance">{{ balance }}</b> coins</div>
-  <div class="display"><input class="num" id="numInput" placeholder="Phone number" inputmode="tel"></div>
-  <select class="country-select" id="countrySelect">
-    <option value="">Select country...</option>
-  </select>
-  <div class="country" id="countryInfo"></div>
-  <div class="pad" id="pad"></div>
-  <div class="actions">
-    <button class="call-btn" id="callBtn" title="Call">📞</button>
-    <button class="hang-btn" id="hangBtn" title="Hang up">📵</button>
+  <div class="brand"><i></i> Easy Calls</div>
+  <h1>الدايلر</h1>
+  {% if shared %}<div style="font-size:12px;color:#4fc3f7;margin-bottom:6px;">🔗 {{ user.name }} — صالح لحد <span id="linkExp" data-t="{{ link_expires_at }}"></span></div>{% endif %}
+  <div class="pcard-wrap"><div class="pcard">
+    <div class="logo"></div>
+    <div class="label">EASY COINS</div>
+    <div class="amount"><span id="balance">{{ balance }}</span> <small>C</small></div>
+    <div class="hint">المكالمات بتتخصم من الكوينز (C)</div>
+    <div class="chip-row"><button class="chip" id="refreshBtn" type="button" title="تحديث الرصيد">🔄 تحديث</button></div>
+  </div></div>
+  <div class="rec-banner" id="recBanner">🔴 المكالمة بتتسجل</div>
+  {% if not shared %}
+  <div class="rec-toggle" id="recToggleRow"{% if not telegram_ready %} style="opacity:0.55"{% endif %}>
+    <span>🎙️ تسجيل المكالمات وإرسالها على تيليجرام{% if not telegram_ready %} <small>(البوت مش مفعّل)</small>{% endif %}</span>
+    <button type="button" class="chip" id="recToggle" data-on="{{ '1' if recording else '0' }}">{{ 'تشغيل ✅' if recording else 'إيقاف' }}</button>
   </div>
-  <div class="status" id="status">Ready to call</div>
+  {% endif %}
+  <select class="picker" id="countryPicker" title="الدولة (للأرقام المحلية اللي بتبدأ بـ 0)">
+    {% for c in countries %}<option value="{{ c.code }}"{% if c.code == '20' %} selected{% endif %}>{{ c.name }} (+{{ c.code }})</option>{% endfor %}
+  </select>
+  <div class="display"><input class="num" id="numInput" placeholder="رقم الهاتف (010... أو ‎+20...)" inputmode="tel" autocomplete="tel"><button class="bksp" id="bkspBtn" type="button" title="مسح (اضغط مطولاً لمسح الكل)">⌫</button></div>
+  <div class="dtmf-line" id="dtmfLine"></div>
+  <div class="country" id="countryInfo"></div>
+  <div class="minutes" id="minutesInfo"></div>
+  <div class="pad" id="pad"></div>
+  <div class="incall" id="inCall">
+    <button class="ctl" id="muteBtn" type="button"><span class="ico">🎙️</span><span class="lbl">كتم</span></button>
+    <button class="ctl warn" id="holdBtn" type="button" disabled><span class="ico">⏸️</span><span class="lbl">تعليق</span></button>
+    <button class="ctl" id="spkBtn" type="button"><span class="ico">📱</span><span class="lbl">سماعة</span></button>
+    <button class="ctl" id="padBtn" type="button"><span class="ico">⌨️</span><span class="lbl">الأرقام</span></button>
+  </div>
+  <div class="ctl-note" id="ctlNote"></div>
+  <div class="actions">
+    <button class="redial-btn" id="redialBtn" type="button" title="إعادة الاتصال بآخر رقم" style="display:none;">🔁<small id="redialNum"></small></button>
+    <button class="call-btn" id="callBtn" title="اتصال">📞</button>
+    <button class="hang-btn" id="hangBtn" title="إنهاء المكالمة">📵 إنهاء</button>
+  </div>
+  <div class="status" id="status">جاهز للاتصال</div>
   <div class="timer" id="timer"></div>
-  <div class="auth-box" id="authBox" style="margin:10px 0; padding:12px; border:1px dashed #ffb74d; border-radius:10px;">
-    <div style="font-size:14px; margin-bottom:8px;">📱 Phone number verification <b>required</b> before calls (WhatsApp code)</div>
-    <div style="font-size:12px; color:#ffb74d; margin-bottom:8px;">⚠️ This must be <b>your own number</b> (the account owner) — not the number you will call</div>
+  {% if shared %}
+  {% else %}
+  <div class="auth-ok" id="authOk" style="{% if not phone_authenticated %}display:none;{% endif %}">✅ رقمك متوثق — <a onclick="showAuthBox()">توثيق رقم تاني</a></div>
+  <div class="auth-box" id="authBox" style="margin:10px 0; padding:12px; border:1px dashed #ffb74d; border-radius:10px;{% if phone_authenticated %} display:none;{% endif %}">
+    <div style="font-size:14px; margin-bottom:8px;">📱 توثيق رقم الموبايل <b>إجباري</b> قبل المكالمات (كود واتساب)</div>
+    <div style="font-size:12px; color:#ffb74d; margin-bottom:8px;">⚠️ ده لازم يكون <b>رقمك انت</b> (صاحب الحساب) — مش الرقم اللي هتتصل بيه. الأرقام اللي بتبدأ بـ 0 بتتحسب على الدولة المختارة فوق.</div>
     <div id="authStep1">
-      <input class="num" id="authPhone" placeholder="Your number (e.g. 01044555099)" inputmode="tel" style="width:100%; margin-bottom:8px;">
-      <button onclick="requestAuthCode()" style="width:100%;">Send WhatsApp code 📩</button>
+      <input class="num" id="authPhone" placeholder="مثال: 01044555099 أو ‎+201044555099" inputmode="tel" style="width:100%; margin-bottom:8px;">
+      <button onclick="requestAuthCode()" style="width:100%;">ابعت كود الواتساب 📩</button>
     </div>
     <div id="authStep2" style="display:none;">
-      <div style="font-size:13px; margin-bottom:8px;">Enter the code you received on WhatsApp:</div>
-      <input class="num" id="authCode" placeholder="Verification code" inputmode="numeric" style="width:100%; margin-bottom:8px;">
-      <button onclick="submitAuthCode()" style="width:100%;">Verify ✅</button>
+      <div style="font-size:13px; margin-bottom:8px;">دخل الكود اللي وصلك واتساب:</div>
+      <input class="num" id="authCode" placeholder="كود التوثيق" inputmode="numeric" style="width:100%; margin-bottom:8px;">
+      <button onclick="submitAuthCode()" style="width:100%;">توثيق ✅</button>
     </div>
     <div id="authMsg" style="font-size:13px; margin-top:8px;"></div>
   </div>
-  <a class="back" href="/">← Back</a>
+  {% endif %}
+  <div class="log-container">
+    <div class="log-header">
+      <span>📋 SIP Activity Log</span>
+      <span>
+        <button onclick="navigator.clipboard && navigator.clipboard.writeText(document.getElementById('sipLog').textContent)">نسخ</button>
+        <button onclick="document.getElementById('sipLog').textContent='SIP Log cleared...'">مسح</button>
+      </span>
+    </div>
+    <div class="sip-log" id="sipLog">SIP Log: جاهز...</div>
+  </div>
+  {% if shared %}
+  <a class="back" href="/logout">خروج من الرابط</a>
+  {% else %}
+  {% include "_share_links.html" %}
+  <a class="back" href="/">← رجوع</a>
+  {% endif %}
 </div>
 <audio id="remoteAudio" autoplay playsinline></audio>
 
 <script>
-function logSip(msg) { /* removed */ }
+const linkExp = document.getElementById('linkExp');
+if (linkExp) linkExp.textContent = new Date(+linkExp.dataset.t * 1000).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' });
+const COUNTRIES = {{ countries | tojson }};
+const COUNTRY_BY_CODE = {};
+COUNTRIES.forEach(c => { COUNTRY_BY_CODE[c.code] = c; });
+const KEEPALIVE_MSG = '__ka__';  // swallowed by /ws-proxy, never sent to the SIP server
+
+const sipLogEl = document.getElementById('sipLog');
+function logSip(msg) {
+  const t = new Date().toLocaleTimeString('en-US', { hour12: false });
+  sipLogEl.textContent += `\n[${t}] ${msg}`;
+  sipLogEl.scrollTop = sipLogEl.scrollHeight;
+}
+
+// ---------- number parsing ----------
+const picker = document.getElementById('countryPicker');
+try { const saved = localStorage.getItem('dialCountry'); if (saved && COUNTRY_BY_CODE[saved]) picker.value = saved; } catch (e) {}
+picker.addEventListener('change', () => { try { localStorage.setItem('dialCountry', picker.value); } catch (e) {} detectCountry(); });
+
+// Rules:
+//  "+..." or "00..."          -> international, country auto-detected from the prefix
+//  "0..." (single leading 0)  -> local number in the picked country (leading 0 dropped)
+//  starts with picked code    -> that country
+//  anything else              -> international auto-detect, falling back to the picked country
+//                                (also when the detected national part would start with 0)
+function parseNumber(rawInput) {
+  const s = String(rawInput || '').trim();
+  let intl = s.startsWith('+');
+  let d = s.replace(/\D/g, '');
+  if (!d) return null;
+  if (!intl && d.startsWith('00')) { intl = true; d = d.slice(2); }
+  const pick = picker.value;
+  if (!intl && d.startsWith('0')) {
+    const national = d.replace(/^0+/, '');
+    return national ? { cc: pick, national, local: true } : null;
+  }
+  if (!intl && d.startsWith(pick) && d.length > pick.length + 4) {
+    return { cc: pick, national: d.slice(pick.length) };
+  }
+  for (let len = Math.min(6, d.length - 1); len >= 1; len--) {
+    const p = d.slice(0, len);
+    if (COUNTRY_BY_CODE[p]) {
+      const national = d.slice(len);
+      // national numbers never start with 0 after a country code; without "+"
+      // this is most likely a local number typed without its leading 0
+      if (!intl && national.startsWith('0')) break;
+      return { cc: p, national };
+    }
+  }
+  if (!intl) return { cc: pick, national: d, local: true };
+  return null;
+}
 
 const pad = document.getElementById('pad');
 const numInput = document.getElementById('numInput');
 const keys = [['1',''],['2','ABC'],['3','DEF'],['4','GHI'],['5','JKL'],['6','MNO'],['7','PQRS'],['8','TUV'],['9','WXYZ'],['*',''],['0','+'],['#','']];
+// Arabic-Indic / Persian digits -> ASCII; keep only what a phone number can contain
+function normalizeDial(str) {
+  return String(str || '')
+    .replace(/[\u0660-\u0669]/g, c => String(c.charCodeAt(0) - 0x0660))
+    .replace(/[\u06F0-\u06F9]/g, c => String(c.charCodeAt(0) - 0x06F0))
+    .replace(/[^\d+*#]/g, '');
+}
+function insertAtCursor(text) {
+  const v = numInput.value;
+  const focused = document.activeElement === numInput;
+  let a = focused && numInput.selectionStart != null ? numInput.selectionStart : v.length;
+  let b = focused && numInput.selectionEnd != null ? numInput.selectionEnd : v.length;
+  numInput.value = v.slice(0, a) + text + v.slice(b);
+  if (focused && numInput.setSelectionRange) numInput.setSelectionRange(a + text.length, a + text.length);
+  detectCountry();
+}
+function backspace() {
+  const v = numInput.value;
+  const focused = document.activeElement === numInput;
+  let a = focused && numInput.selectionStart != null ? numInput.selectionStart : v.length;
+  let b = focused && numInput.selectionEnd != null ? numInput.selectionEnd : v.length;
+  if (a === b) { if (a === 0) return; a -= 1; }
+  numInput.value = v.slice(0, a) + v.slice(b);
+  if (focused && numInput.setSelectionRange) numInput.setSelectionRange(a, a);
+  detectCountry();
+}
+function padPress(d) {
+  if (!uiEnded) { sendDtmf(d); return; }   // during a call the keypad sends tones
+  insertAtCursor(d);
+}
 keys.forEach(([d, s]) => {
   const b = document.createElement('button');
+  b.type = 'button';
   b.innerHTML = d + (s ? `<small>${s}</small>` : '');
-  b.onclick = () => { numInput.value += d; detectCountry(); };
+  let lpTimer = null, longFired = false;
+  if (d === '0') {
+    // long-press 0 -> "+" (when dialling)
+    const start = () => { longFired = false; clearTimeout(lpTimer); lpTimer = setTimeout(() => { if (uiEnded) { longFired = true; insertAtCursor('+'); } }, 550); };
+    const stop = () => clearTimeout(lpTimer);
+    b.addEventListener('pointerdown', start);
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, stop));
+    b.addEventListener('contextmenu', e => e.preventDefault());
+  }
+  b.onclick = () => { if (longFired) { longFired = false; return; } padPress(d); };
   pad.appendChild(b);
 });
-numInput.addEventListener('input', detectCountry);
-numInput.addEventListener('keydown', e => { if (e.key === 'Backspace') setTimeout(detectCountry, 0); });
-
-let detectedPrefix = '';
-const countrySelect = document.getElementById('countrySelect');
-fetch('/api/countries').then(r => r.json()).then(j => {
-  (j.countries || []).forEach(c => {
-    const o = document.createElement('option');
-    o.value = c.code;
-    o.textContent = `${c.name} (+${c.code}) — ${c.rate} coins/min`;
-    o.dataset.name = c.name;
-    o.dataset.rate = c.rate;
-    countrySelect.appendChild(o);
-  });
-}).catch(() => {});
-countrySelect.addEventListener('change', () => {
-  const o = countrySelect.options[countrySelect.selectedIndex];
-  if (o && o.value) {
-    detectedPrefix = o.value;
-    document.getElementById('countryInfo').textContent =
-      `${o.dataset.name} (+${o.value}) — ${o.dataset.rate} coins/min`;
-  } else {
-    detectedPrefix = '';
-    document.getElementById('countryInfo').textContent = '';
+const bkspBtn = document.getElementById('bkspBtn');
+let bkTimer = null, bkLong = false;
+bkspBtn.addEventListener('pointerdown', () => { bkLong = false; clearTimeout(bkTimer); bkTimer = setTimeout(() => { bkLong = true; numInput.value = ''; detectCountry(); }, 600); });
+['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => bkspBtn.addEventListener(ev, () => clearTimeout(bkTimer)));
+bkspBtn.addEventListener('contextmenu', e => e.preventDefault());
+bkspBtn.onclick = () => { if (bkLong) { bkLong = false; return; } backspace(); };
+numInput.addEventListener('input', () => {
+  const clean = normalizeDial(numInput.value);
+  if (clean !== numInput.value) {
+    const pos = numInput.selectionStart;
+    const diff = numInput.value.length - clean.length;
+    numInput.value = clean;
+    if (pos != null && numInput.setSelectionRange) { const p = Math.max(0, pos - diff); numInput.setSelectionRange(p, p); }
   }
+  detectCountry();
 });
+numInput.addEventListener('paste', e => {
+  const text = (e.clipboardData || window.clipboardData) ? (e.clipboardData || window.clipboardData).getData('text') : '';
+  if (!text) return;  // let the browser paste, the input handler cleans it
+  e.preventDefault();
+  let clean = normalizeDial(text);
+  if (clean.indexOf('+') > 0) clean = (clean.startsWith('+') ? '+' : '') + clean.replace(/\+/g, '');
+  insertAtCursor(clean);
+});
+numInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); if (uiEnded) callBtn.click(); }
+});
+// physical keyboard when the field is not focused (and DTMF during a call)
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return;
+  const k = normalizeDial(e.key);
+  if (k && k.length === 1 && e.key.length === 1) { e.preventDefault(); padPress(k); }
+  else if (e.key === 'Backspace' && uiEnded) { e.preventDefault(); backspace(); }
+  else if (e.key === 'Enter' && uiEnded) { e.preventDefault(); callBtn.click(); }
+});
+
+let parsedTarget = null;
+function detectCountry() {
+  parsedTarget = parseNumber(numInput.value);
+  const el = document.getElementById('countryInfo');
+  updateMinutes();
+  if (!parsedTarget) { el.textContent = ''; return; }
+  const c = COUNTRY_BY_CODE[parsedTarget.cc];
+  el.textContent = c
+    ? `${c.name} (+${parsedTarget.cc}) — ${c.rate} عملة/دقيقة${parsedTarget.local ? ' • رقم محلي' : ''}`
+    : `+${parsedTarget.cc}`;
+}
+// how many minutes the coins cover for the selected / detected country
+function updateMinutes() {
+  const out = document.getElementById('minutesInfo');
+  const cc = parsedTarget ? parsedTarget.cc : picker.value;
+  const c = COUNTRY_BY_CODE[cc];
+  const coins = parseFloat(String(document.getElementById('balance').textContent).replace(/[^\d.\-]/g, ''));
+  if (!c || !c.rate || isNaN(coins)) { out.textContent = ''; return; }
+  const mins = Math.floor(coins / c.rate);
+  out.textContent = mins >= 1 ? `⏱️ رصيدك يكفي ~${mins} دقيقة لـ ${c.name}` : `⚠️ رصيدك مش كفاية لدقيقة واحدة لـ ${c.name} (${c.rate} C/دقيقة)`;
+}
+detectCountry();
+
+// ---------- balance ----------
+const balanceEl = document.getElementById('balance');
+function currentCoins() {
+  const v = parseFloat(String(balanceEl.textContent).replace(/[^\d.\-]/g, ''));
+  return isNaN(v) ? null : v;
+}
+function showBalances(info) {
+  if (info && info.coins !== undefined && info.coins !== null) balanceEl.textContent = info.coins;
+  updateMinutes();
+}
+// networkTp like the official app: NT0001 Wi-Fi, NT0003 mobile data (NT0001 when unknown)
+function networkTp() {
+  const n = typeof navigator !== 'undefined' ? navigator : {};
+  const c = n.connection || n.mozConnection || n.webkitConnection;
+  const t = c && c.type;
+  if (t === 'cellular') return 'NT0003';
+  return 'NT0001';
+}
+async function refreshBalance() {
+  try {
+    const r = await fetch('/api/esim/refresh', { method: 'POST' });
+    const j = await r.json();
+    if (r.ok) {
+      balanceEl.textContent = j.coins;
+      updateMinutes();
+      return true;
+    }
+    logSip('Balance refresh failed: ' + (j.error || r.status));
+  } catch (e) { logSip('Balance refresh error: ' + e); }
+  return false;
+}
+document.getElementById('refreshBtn').onclick = refreshBalance;
+
+// ---------- WhatsApp phone authentication ----------
 let authSeqNo = '';
+function showAuthBox() {
+  document.getElementById('authOk').style.display = 'none';
+  document.getElementById('authBox').style.display = '';
+  document.getElementById('authStep1').style.display = '';
+  document.getElementById('authStep2').style.display = 'none';
+  document.getElementById('authMsg').textContent = '';
+}
 async function requestAuthCode() {
-  const v = document.getElementById('authPhone').value.replace(/\D/g, '');
   const msg = document.getElementById('authMsg');
-  if (!v) { msg.textContent = 'Enter your phone number first'; return; }
-  // Detect country code from the number
-  let cc = '', national = v;
-  for (let len = 4; len >= 1; len--) {
-    const p = v.substring(0, len);
-    try {
-      const r = await fetch('/api/prefix/' + p);
-      if (r.ok) { const j = await r.json(); cc = j.code; national = v.substring(len); break; }
-    } catch(e) {}
-  }
-  if (!cc) { msg.textContent = 'Cannot detect country code from the number'; return; }
-  msg.textContent = 'Sending WhatsApp code... ⏳';
+  const parsed = parseNumber(document.getElementById('authPhone').value);
+  if (!parsed || !parsed.national) { msg.textContent = 'دخل رقم الموبايل الأول'; return; }
+  msg.textContent = `بيبعت الكود واتساب لـ +${parsed.cc} ${parsed.national} ... ⏳`;
   try {
     const r = await fetch('/api/phone-auth/req', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({nationalId: cc, phoneId: national})
+      body: JSON.stringify({nationalId: parsed.cc, phoneId: parsed.national})
     });
     const j = await r.json();
-    if (j.seqNo || String(j.retCode) === '0') {
+    if (j.seqNo || String(j.retCode) === '0' || String(j.retCode) === '1') {
       authSeqNo = j.seqNo || '';
+      const st2 = document.getElementById('authStep2');
       document.getElementById('authStep1').style.display = 'none';
-      document.getElementById('authStep2').style.display = 'block';
-      msg.textContent = 'Code sent on WhatsApp ✅ enter it here';
-      // Save for the next step
-      document.getElementById('authStep2').dataset.cc = cc;
-      document.getElementById('authStep2').dataset.national = national;
+      st2.style.display = 'block';
+      st2.dataset.cc = parsed.cc;
+      st2.dataset.national = parsed.national;
+      msg.textContent = 'الكود اتبعت واتساب ✅ دخله هنا';
     } else {
-      msg.textContent = 'Failed: ' + (j.raw || j.error || j.retCode || '?');
+      msg.textContent = 'فشل: ' + (j.message || j.error || j.raw || j.retCode || '؟');
     }
-  } catch(e) { msg.textContent = 'Error: ' + e; }
+  } catch (e) { msg.textContent = 'خطأ: ' + e; }
 }
 async function submitAuthCode() {
   const code = document.getElementById('authCode').value.replace(/\D/g, '');
   const msg = document.getElementById('authMsg');
   const st2 = document.getElementById('authStep2');
-  if (!code) { msg.textContent = 'Enter the code'; return; }
-  msg.textContent = 'Verifying... ⏳';
+  if (!code) { msg.textContent = 'دخل الكود'; return; }
+  msg.textContent = 'بيتحقق... ⏳';
   try {
     const r = await fetch('/api/phone-auth/res', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -148,32 +398,13 @@ async function submitAuthCode() {
     });
     const j = await r.json();
     if (j.ok) {
-      msg.textContent = 'Verified ✅ you can call now';
       document.getElementById('authBox').style.display = 'none';
+      document.getElementById('authOk').style.display = '';
+      msg.textContent = '';
     } else {
-      msg.textContent = 'Wrong code or failed: ' + (j.raw || j.error || j.retCode || '?');
+      msg.textContent = 'الكود غلط أو فشل: ' + (j.message || j.error || j.raw || j.retCode || '؟');
     }
-  } catch(e) { msg.textContent = 'Error: ' + e; }
-}
-async function detectCountry() {
-  const v = numInput.value.replace(/\D/g, '');
-  detectedPrefix = '';
-  document.getElementById('countryInfo').textContent = '';
-  if (!v) return;
-  for (let len = Math.min(v.length, 6); len >= 1; len--) {
-    const p = v.substring(0, len);
-    try {
-      const r = await fetch('/api/prefix/' + p);
-      if (r.ok) {
-        const info = await r.json();
-        detectedPrefix = p;
-        document.getElementById('countryInfo').textContent =
-          `${info.name} (+${p}) — ${info.rate} coins/min`;
-        countrySelect.value = p;
-        return;
-      }
-    } catch (e) {}
-  }
+  } catch (e) { msg.textContent = 'خطأ: ' + e; }
 }
 
 function md5(str) {
@@ -217,6 +448,7 @@ function md5(str) {
   return hex(a) + hex(b) + hex(c) + hex(d);
 }
 
+// ---------- SIP over WebSocket ----------
 const statusEl = document.getElementById('status');
 const timerEl = document.getElementById('timer');
 const callBtn = document.getElementById('callBtn');
@@ -224,72 +456,31 @@ const hangBtn = document.getElementById('hangBtn');
 const remoteAudio = document.getElementById('remoteAudio');
 
 let ws = null, pc = null, localStream = null, callInfo = null;
-let keepaliveInt = null;
-let statsInt = null;
-function startKeepalive() {
-  stopKeepalive();
-  // SIP OPTIONS keepalive — stronger than CRLF, the server must reply
-  keepaliveInt = setInterval(() => {
-    if (ws && ws.readyState === 1 && inviteSent && callInfo && invCallId) {
-      try {
-        const branch = 'z9hG4bK' + rand(12);
-        const scheme = (callInfo.isTls === 'Y' || callInfo.isTls === true) ? 'sips' : 'sip';
-        const uri = `${scheme}:${callInfo.webrtcId}@${callInfo.webrtcAddr};transport=${scheme === 'sips' ? 'WSS' : 'WS'}`;
-        invCseq++;
-        let msg = `OPTIONS ${uri} SIP/2.0\r\n`;
-        msg += `Via: SIP/2.0/${scheme === 'sips' ? 'WSS' : 'WS'} df7jal23ls0d.invalid;branch=${branch};rport\r\n`;
-        msg += `From: "${callInfo.sipIdentity || callInfo.uniqueId}"<${scheme}:${callInfo.webrtcId}@${callInfo.webrtcAddr}>;tag=${invFromTag}\r\n`;
-        msg += `To: <${scheme}:${callInfo.webrtcId}@${callInfo.webrtcAddr}>\r\n`;
-        msg += `Call-ID: ${invCallId}\r\n`;
-        msg += `CSeq: ${invCseq} OPTIONS\r\n`;
-        msg += `Max-Forwards: 70\r\n`;
-        msg += `User-Agent: Softbay-Android\r\n`;
-        msg += `Content-Length: 0\r\n\r\n`;
-        ws.send(msg);
-      } catch(e) {}
-    }
-  }, 10000);
-  // Monitor outbound audio packets every 5s — to know if audio is being sent
-  statsInt = setInterval(async () => {
-    if (!pc) return;
-    try {
-      const stats = await pc.getStats();
-      stats.forEach(r => {
-        if (r.type === 'outbound-rtp' && r.kind === 'audio') {
-          logSip(`RTP out: sent=${r.packetsSent || 0} bytes=${r.bytesSent || 0}`);
-        }
-        if (r.type === 'candidate-pair' && r.state === 'succeeded' && r.nominated) {
-          logSip(`Selected pair: ${r.localCandidateId} -> ${r.remoteCandidateId}`);
-        }
-      });
-    } catch(e) {}
-  }, 5000);
-}
-function stopKeepalive() {
-  if (keepaliveInt) { clearInterval(keepaliveInt); keepaliveInt = null; }
-  if (statsInt) { clearInterval(statsInt); statsInt = null; }
-}
 let regCallId = '', regFromTag = '', regCseq = 1;
 let invCallId = '', invFromTag = '', invCseq = 1, toTag = '';
-let lastInviteSeq = 1, lastInviteBranch = '';
-let registered = false, inviteSent = false;
-let timerInt = null, callStart = 0;
-let pendingSdp = null, proxyFailed = false, uiEnded = false;
+let lastInviteSeq = 1, lastInviteBranch = '', lastInviteUri = '';
+let routeSet = [], remoteTarget = '';
+let registered = false, inviteSent = false, gotProvisional = false, established = false;
+let hangupRequested = false, cancelSent = false, byeSent = false, byeAuthTried = false;
+let timerInt = null, callStart = 0, closeTimer = null, keepaliveInt = null, statsInt = null;
+let pendingSdp = null, proxyFailed = false, uiEnded = true, wasConnected = false;
 
 const PROXY_ERRORS = {
-  'no-login-session': 'Session expired — log out and log back in',
-  'missing-host-port': 'Call server data missing (host/port)',
-  'backend-connect-failed': 'Proxy cannot reach the server',
+  'no-login-session': 'الجلسة انتهت — اعمل خروج ودخول تاني',
+  'missing-host-port': 'بيانات سيرفر المكالمة ناقصة (host/port)',
+  'backend-connect-failed': 'البروكسي مش قادر يوصل للسيرفر',
+  'backend-tls-failed': 'البروكسي مش قادر يفتح اتصال آمن (WSS) بالسيرفر',
+  'proxy-crashed': 'البروكسي وقع',
 };
-
 function proxyErrorText(reason) {
   const key = reason.split(':')[0];
-  const base = PROXY_ERRORS[key] || ('Proxy error: ' + reason);
-  return key === 'backend-connect-failed' ? base + ' (' + reason + ')' : base;
+  const base = PROXY_ERRORS[key] || ('خطأ في البروكسي: ' + reason);
+  return base + (key === 'no-login-session' || key === 'missing-host-port' ? '' : ' (' + reason + ')');
 }
 
 function setStatus(t) { statusEl.textContent = t; }
-function rand(n) { const c='abcdef0123456789'; let s=''; for(let i=0;i<n;i++) s+=c[Math.floor(Math.random()*16)]; return s; }
+function rand(n) { const c = 'abcdef0123456789'; let s = ''; for (let i = 0; i < n; i++) s += c[Math.floor(Math.random() * 16)]; return s; }
+function newBranch() { return 'z9hG4bK' + rand(12); }
 
 function parseWwwAuth(h) {
   const out = {};
@@ -298,34 +489,326 @@ function parseWwwAuth(h) {
   while ((m = re.exec(h))) out[m[1]] = m[2] || m[3];
   return out;
 }
-
 function digestResponse(username, password, realm, nonce, method, uri, qop, nc, cnonce) {
   const ha1 = md5(`${username}:${realm}:${password}`);
   const ha2 = md5(`${method}:${uri}`);
   if (qop) return md5(`${ha1}:${nonce}:${nc}:${cnonce}:${qop}:${ha2}`);
   return md5(`${ha1}:${nonce}:${ha2}`);
 }
-
-function buildAuthHeader(challenge, method, uri) {
+function buildAuthHeader(challenge, method) {
   const p = parseWwwAuth(challenge);
   const realm = p.realm || '', nonce = p.nonce || '';
   const qop = p.qop ? p.qop.split(',')[0].trim() : '';
   const nc = '00000001', cnonce = rand(8);
-  // Exactly like the original app (mx3.smali): the digest URI is always "sips:<host>" even over plain WS
+  // Same as the official app (mx3.smali): digest URI is always "sips:<host>"
   const digestUri = 'sips:' + callInfo.webrtcAddr;
   const resp = digestResponse(callInfo.webrtcId, callInfo.webrtcPwd, realm, nonce, method, digestUri, qop, nc, cnonce);
   let h = `Digest username="${callInfo.webrtcId}", realm="${realm}", nonce="${nonce}", uri="${digestUri}", response="${resp}", algorithm=MD5`;
   if (qop) h += `, qop=${qop}, nc=${nc}, cnonce="${cnonce}"`;
+  if (p.opaque) h += `, opaque="${p.opaque}"`;
   return h;
 }
 
-function getTargetDialUser() {
-  // Plain base format only — the backend builds dialString like the original app
-  // (country code + number without local zero), the expected format
-  return callInfo.dialString;
+function sch() { return callInfo._useWss ? 'sips' : 'sip'; }
+function tpt() { return callInfo._useWss ? 'WSS' : 'WS'; }
+function dialUser() { return callInfo.dialString; }
+function inviteUri() { return `${sch()}:${dialUser()}@${callInfo.webrtcAddr};transport=${tpt()}`; }
+function remoteToHeader(tag) {
+  const u = dialUser();
+  return `"${u}"<${sch()}:${u}@${callInfo.webrtcAddr}>` + (tag ? `;tag=${tag}` : '');
+}
+function fromHeader(tag) {
+  // From display name = login sessionId (verified from the APK), not uniqueId
+  return `"${callInfo.sipIdentity || callInfo.uniqueId}"<${sch()}:${callInfo.webrtcId}@${callInfo.webrtcAddr}>;tag=${tag}`;
 }
 
-// Clean and pin codecs fully compatible with Softbay PBX
+// Build one SIP request. opts: method, uri, to, callId, fromTag, cseq, branch, headers{}, routes[], body, contact
+function buildRequest(o) {
+  let msg = `${o.method} ${o.uri} SIP/2.0\r\n`;
+  msg += `Via: SIP/2.0/${tpt()} df7jal23ls0d.invalid;branch=${o.branch || newBranch()};rport\r\n`;
+  for (const r of (o.routes || [])) msg += `Route: ${r}\r\n`;
+  msg += `From: ${fromHeader(o.fromTag)}\r\n`;
+  msg += `To: ${o.to}\r\n`;
+  msg += `Call-ID: ${o.callId}\r\n`;
+  msg += `CSeq: ${o.cseq} ${o.method}\r\n`;
+  if (o.contact !== false) {
+    msg += `Contact: "${callInfo.webrtcId}"<${sch()}:${callInfo.webrtcId}@df7jal23ls0d.invalid;transport=${tpt().toLowerCase()}>\r\n`;
+  }
+  msg += `Max-Forwards: 70\r\n`;
+  msg += `User-Agent: Softbay-Android\r\n`;
+  msg += `Organization: Softbay\r\n`;
+  for (const [k, v] of Object.entries(o.headers || {})) msg += `${k}: ${v}\r\n`;
+  if (o.body) {
+    msg += `Content-Type: ${o.contentType || 'application/sdp'}\r\n`;
+    msg += `Content-Length: ${new TextEncoder().encode(o.body).length}\r\n\r\n${o.body}`;
+  } else {
+    msg += `Content-Length: 0\r\n\r\n`;
+  }
+  return msg;
+}
+function wsSend(msg) {
+  if (!ws || ws.readyState !== 1) return false;
+  ws.send(msg);
+  return true;
+}
+
+function sendRegister(authHeader) {
+  const headers = { 'Expires': '600' };
+  if (authHeader) headers['Authorization'] = authHeader;
+  logSip(`-> REGISTER ${authHeader ? '(Auth)' : ''}`);
+  wsSend(buildRequest({
+    method: 'REGISTER', uri: `${sch()}:${callInfo.webrtcAddr};transport=${tpt()}`,
+    to: `"${callInfo.webrtcId}"<${sch()}:${callInfo.webrtcId}@${callInfo.webrtcAddr}>`,
+    callId: regCallId, fromTag: regFromTag, cseq: regCseq++, headers,
+  }));
+}
+
+function sendInvite(sdp, authHeader, authHeaderName = 'Authorization') {
+  const headers = {};
+  if (authHeader) headers[authHeaderName] = authHeader;
+  lastInviteSeq = invCseq++;
+  lastInviteBranch = newBranch();
+  lastInviteUri = inviteUri();
+  const msg = buildRequest({
+    method: 'INVITE', uri: lastInviteUri, to: remoteToHeader(''),
+    callId: invCallId, fromTag: invFromTag, cseq: lastInviteSeq, branch: lastInviteBranch,
+    headers, body: sdp,
+  });
+  logSip(`-> INVITE ${dialUser()}`);
+  logSip(`<!> FULL INVITE sent:\n` + msg.slice(0, 2500).replace(/Authorization: .*/g, 'Authorization: <hidden>'));
+  wsSend(msg);
+  inviteSent = true;
+}
+
+// ACK for a non-2xx final response: same branch + Request-URI as the INVITE, To from the response
+function sendAckNon2xx(toFromResponse) {
+  logSip('-> ACK (non-2xx)');
+  wsSend(buildRequest({
+    method: 'ACK', uri: lastInviteUri, to: toFromResponse || remoteToHeader(toTag),
+    callId: invCallId, fromTag: invFromTag, cseq: lastInviteSeq, branch: lastInviteBranch, contact: false,
+  }));
+}
+// In-dialog requests (ACK for 2xx, BYE): Request-URI = remote Contact, Route = Record-Route set
+function sendAck2xx() {
+  logSip('-> ACK');
+  wsSend(buildRequest({
+    method: 'ACK', uri: remoteTarget || lastInviteUri, to: remoteToHeader(toTag),
+    callId: invCallId, fromTag: invFromTag, cseq: lastInviteSeq, routes: routeSet,
+  }));
+}
+function sendBye(authHeader, authHeaderName = 'Authorization') {
+  const headers = {};
+  if (authHeader) headers[authHeaderName] = authHeader;
+  logSip(`-> BYE ${authHeader ? '(Auth)' : ''}`);
+  byeSent = true;
+  wsSend(buildRequest({
+    method: 'BYE', uri: remoteTarget || lastInviteUri, to: remoteToHeader(toTag),
+    callId: invCallId, fromTag: invFromTag, cseq: invCseq++, routes: routeSet, headers,
+  }));
+}
+// CANCEL an unanswered INVITE: same Request-URI, branch, Call-ID, From, CSeq number; To without tag
+function sendCancel() {
+  logSip('-> CANCEL');
+  cancelSent = true;
+  wsSend(buildRequest({
+    method: 'CANCEL', uri: lastInviteUri, to: remoteToHeader(''),
+    callId: invCallId, fromTag: invFromTag, cseq: lastInviteSeq, branch: lastInviteBranch, contact: false,
+  }));
+}
+
+const COMPACT = { v: 'via', f: 'from', t: 'to', i: 'call-id', m: 'contact', l: 'content-length', c: 'content-type', k: 'supported' };
+function splitHeaderList(v) {
+  const out = []; let cur = '', inAngle = false, inQuote = false;
+  for (const ch of v) {
+    if (ch === '"') inQuote = !inQuote;
+    else if (!inQuote && ch === '<') inAngle = true;
+    else if (!inQuote && ch === '>') inAngle = false;
+    if (ch === ',' && !inAngle && !inQuote) { if (cur.trim()) out.push(cur.trim()); cur = ''; }
+    else cur += ch;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+function parseSip(data) {
+  const headEnd = data.indexOf('\r\n\r\n');
+  const head = headEnd >= 0 ? data.substring(0, headEnd) : data;
+  const body = headEnd >= 0 ? data.substring(headEnd + 4) : '';
+  const lines = head.split('\r\n');
+  const start = (lines[0] || '').trim();
+  const headers = {}, raw = {};
+  for (let i = 1; i < lines.length; i++) {
+    const idx = lines[i].indexOf(':');
+    if (idx > 0) {
+      let k = lines[i].substring(0, idx).trim().toLowerCase();
+      k = COMPACT[k] || k;
+      const v = lines[i].substring(idx + 1).trim();
+      (raw[k] = raw[k] || []).push(v);
+      headers[k] = headers[k] ? headers[k] + ', ' + v : v;
+    }
+  }
+  return { start, headers, raw, body };
+}
+function tagOf(h) { const m = (h || '').match(/;\s*tag=([^\s;,>]+)/); return m ? m[1] : ''; }
+function uriOf(nameAddr) {
+  const m = nameAddr.match(/<([^>]+)>/);
+  return (m ? m[1] : nameAddr.split(';')[0]).trim();
+}
+function learnDialog(raw) {
+  // UAC route set = Record-Route entries in reverse order
+  const rr = [];
+  (raw['record-route'] || []).forEach(v => splitHeaderList(v).forEach(x => rr.push(x)));
+  if (rr.length) routeSet = rr.reverse();
+  const contact = (raw['contact'] || [])[0];
+  if (contact) {
+    const u = uriOf(splitHeaderList(contact)[0] || contact);
+    if (u && !u.includes('.invalid')) remoteTarget = u;
+  }
+}
+
+function replyToRequest(headers, code, reason, extra = '', body = '') {
+  let r = `SIP/2.0 ${code} ${reason}\r\n`;
+  (headers.via ? splitHeaderList(headers.via) : []).forEach(v => { r += `Via: ${v}\r\n`; });
+  if (headers['record-route']) r += `Record-Route: ${headers['record-route']}\r\n`;
+  r += `From: ${headers.from || ''}\r\nTo: ${headers.to || ''}\r\nCall-ID: ${headers['call-id'] || ''}\r\nCSeq: ${headers.cseq || ''}\r\n`;
+  r += extra;
+  if (body) r += `Content-Type: application/sdp\r\nContent-Length: ${new TextEncoder().encode(body).length}\r\n\r\n${body}`;
+  else r += `Content-Length: 0\r\n\r\n`;
+  wsSend(r);
+}
+
+async function setRemoteSdp(body, where) {
+  if (!body || !pc || pc.remoteDescription) return;
+  try {
+    await pc.setRemoteDescription({ type: 'answer', sdp: body });
+    logSip(`Remote SDP set from ${where} (${body.length} chars)`);
+    remoteAudio.play().catch(() => {});
+  } catch (e) { logSip(`SDP set err (${where}): ${e.message}`); }
+}
+
+async function onSipMessage(data) {
+  if (!data || !data.trim()) return;
+  const { start, headers, raw, body } = parseSip(data);
+  if (!start) return;
+  const cseqH = headers['cseq'] || '';
+  const method = (cseqH.split(/\s+/).pop() || '').toUpperCase();
+
+  // ----- requests from the server -----
+  if (!start.startsWith('SIP/2.0')) {
+    const reqMethod = start.split(' ')[0].toUpperCase();
+    logSip(`<- ${reqMethod} (request)`);
+    if (reqMethod === 'BYE') {
+      replyToRequest(headers, 200, 'OK');
+      established = false;
+      endCallUI('الطرف الآخر أنهى المكالمة');
+    } else if (reqMethod === 'INVITE' && pc && pc.localDescription) {
+      // session refresh re-INVITE: answer with our current SDP
+      const contact = `Contact: "${callInfo.webrtcId}"<${sch()}:${callInfo.webrtcId}@df7jal23ls0d.invalid;transport=${tpt().toLowerCase()}>\r\n`;
+      replyToRequest(headers, 200, 'OK', contact, lastSentSdp || cleanSdpForSip(pc.localDescription.sdp));
+    } else if (reqMethod === 'ACK') {
+      // nothing to do
+    } else if (['OPTIONS', 'NOTIFY', 'INFO', 'UPDATE', 'MESSAGE'].includes(reqMethod)) {
+      replyToRequest(headers, 200, 'OK');
+    } else {
+      replyToRequest(headers, 501, 'Not Implemented');
+    }
+    return;
+  }
+
+  // ----- responses -----
+  const code = parseInt(start.substring(8, 11), 10) || 0;
+  logSip(`<- ${start} [${method}]`);
+  const cseqNum = parseInt(cseqH, 10) || 0;
+  if (method === 'INVITE' && established && cseqNum !== lastInviteSeq) {
+    await onReinviteResponse(code, cseqNum, headers, raw, body);
+    return;
+  }
+
+  if (code === 401 || code === 407) {
+    const challenge = headers['www-authenticate'] || headers['proxy-authenticate'] || '';
+    const authName = code === 407 ? 'Proxy-Authorization' : 'Authorization';
+    const auth = buildAuthHeader(challenge, method);
+    if (method === 'REGISTER') {
+      setStatus('توثيق الدخول (REGISTER)...');
+      sendRegister(auth);
+    } else if (method === 'INVITE') {
+      sendAckNon2xx(headers['to']);
+      if (hangupRequested) { endCallUI('أنهيت المكالمة'); return; }
+      if (pendingSdp) {
+        setStatus('توثيق المكالمة (INVITE Auth)...');
+        sendInvite(pendingSdp, auth, authName);
+      }
+    } else if (method === 'BYE' && !byeAuthTried) {
+      byeAuthTried = true;
+      sendBye(auth, authName);
+    }
+    return;
+  }
+
+  if (code >= 100 && code < 200) {
+    if (method !== 'INVITE') return;
+    if (code === 100) { setStatus('جاري فتح الخط (100 Trying)...'); return; }
+    gotProvisional = true;
+    setStatus('بيرن... 📲');
+    logSip(`<!> FULL ${code} response:\n` + data.slice(0, 2500));
+    const t = tagOf(headers['to']); if (t) toTag = t;
+    await setRemoteSdp(body, String(code));
+    if (hangupRequested && !cancelSent) sendCancel();
+    return;
+  }
+
+  if (code >= 200 && code < 300) {
+    if (method === 'REGISTER') {
+      if (!registered) {
+        registered = true;
+        setStatus('تم التسجيل ✅ تجهيز الصوت...');
+        await startMedia();
+      }
+    } else if (method === 'INVITE') {
+      const t = tagOf(headers['to']); if (t) toTag = t;
+      learnDialog(raw);
+      sendAck2xx();
+      if (established) return;  // retransmitted 200 OK
+      established = true; wasConnected = true;
+      if (hangupRequested) { sendBye(); return; }  // answered while we were cancelling
+      setStatus('متصل ✅');
+      updateCtlButtons();
+      startStats();
+      callConnectedAt = Date.now();
+      ctrlSend({ type: 'connected' });
+      startRecording();
+      if (body) await setRemoteSdp(body, '200 OK');
+      else if (!pc || !pc.remoteDescription) logSip('⚠️ 200 OK بلا SDP!');
+      if (!timerInt) {
+        callStart = Date.now();
+        timerInt = setInterval(() => {
+          const s = Math.floor((Date.now() - callStart) / 1000);
+          timerEl.textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+        }, 1000);
+      }
+    } else if (method === 'BYE') {
+      endCallUI('انتهت المكالمة');
+    } else if (method === 'CANCEL') {
+      setStatus('جاري الإلغاء...');  // the INVITE will now get 487
+    }
+    return;
+  }
+
+  if (code >= 300) {
+    logSip(`<!> FULL ${code} response:\n` + data.slice(0, 1800));
+    if (method === 'INVITE') {
+      sendAckNon2xx(headers['to']);
+      if (code === 487 || hangupRequested) endCallUI('اتلغت المكالمة');
+      else endCallUI(`رفض من السيرفر (${code} عند INVITE)`);
+    } else if (method === 'REGISTER') {
+      endCallUI(`رفض من السيرفر (${code} عند REGISTER)`);
+    } else if ((method === 'BYE' || method === 'CANCEL') && hangupRequested) {
+      endCallUI('أنهيت المكالمة');
+    }
+    // errors to any other request (e.g. OPTIONS) must NOT end the call
+  }
+}
+
+// Strip what the PBX does not accept; keep audio only
 function cleanSdpForSip(sdp) {
   const lines = sdp.split(/\r?\n/);
   const out = [];
@@ -336,253 +819,51 @@ function cleanSdpForSip(sdp) {
     if (line.startsWith('a=msid-semantic:')) continue;
     if (line.startsWith('a=ssrc-group:')) continue;
     if (line.startsWith('a=candidate:') && line.includes('.local')) continue;
-    // Exclude video tracks entirely
-    if (line.startsWith('m=video')) skipMedia = true;
-    if (line.startsWith('m=audio')) skipMedia = false;
+    if (line.startsWith('m=')) skipMedia = !line.startsWith('m=audio');
     if (skipMedia) continue;
     out.push(line);
   }
   return out.join('\r\n') + '\r\n';
 }
 
-function sipMsg(method, uri, extraHeaders, body, customBranch) {
-  const tls = !!callInfo._useWss;
-  const transportUpper = tls ? 'WSS' : 'WS';
-  const transportLower = tls ? 'wss' : 'ws';
-  const scheme = tls ? 'sips' : 'sip';
-
-  const isReg = (method === 'REGISTER');
-  const activeCallId = isReg ? regCallId : invCallId;
-  const activeFromTag = isReg ? regFromTag : invFromTag;
-  let seqNum;
-  if (isReg) {
-    seqNum = regCseq++;
-  } else if (method === 'ACK') {
-    seqNum = lastInviteSeq;
-  } else {
-    seqNum = invCseq++;
-    if (method === 'INVITE') lastInviteSeq = seqNum;
-  }
-
-  const branch = customBranch || ('z9hG4bK' + rand(12));
-  if (method === 'INVITE') lastInviteBranch = branch;
-
-  const defaultTo = isReg
-    ? `"${callInfo.webrtcId}"<${scheme}:${callInfo.webrtcId}@${callInfo.webrtcAddr}>`
-    : `"${getTargetDialUser()}"<${scheme}:${getTargetDialUser()}@${callInfo.webrtcAddr}>`;
-
-  let msg = `${method} ${uri} SIP/2.0\r\n`;
-  msg += `Via: SIP/2.0/${transportUpper} df7jal23ls0d.invalid;branch=${branch};rport\r\n`;
-  // From display name = login sessionId (verified by reversing the APK), not uniqueId
-  msg += `From: "${callInfo.sipIdentity || callInfo.uniqueId}"<${scheme}:${callInfo.webrtcId}@${callInfo.webrtcAddr}>;tag=${activeFromTag}\r\n`;
-  msg += `To: ${extraHeaders.to || defaultTo}\r\n`;
-  msg += `Call-ID: ${activeCallId}\r\n`;
-  msg += `CSeq: ${seqNum} ${method}\r\n`;
-  msg += `Contact: "${callInfo.webrtcId}"<${scheme}:${callInfo.webrtcId}@df7jal23ls0d.invalid;transport=${transportLower}>\r\n`;
-  if (isReg) {
-    msg += `Expires: 600\r\n`;
-  }
-  msg += `Max-Forwards: 70\r\n`;
-  msg += `User-Agent: Softbay-Android\r\n`;
-  msg += `Organization: Softbay\r\n`;
-  for (const [k, v] of Object.entries(extraHeaders)) {
-    if (k === 'to') continue;
-    msg += `${k}: ${v}\r\n`;
-  }
-  if (body) {
-    msg += `Content-Type: application/sdp\r\n`;
-    msg += `Content-Length: ${new TextEncoder().encode(body).length}\r\n\r\n${body}`;
-  } else {
-    msg += `Content-Length: 0\r\n\r\n`;
-  }
-  return msg;
+function startKeepalive() {
+  stopKeepalive();
+  // browser <-> proxy keepalive only. The proxy pings the SIP server with
+  // WebSocket ping frames; no SIP OPTIONS are injected into the call dialog.
+  keepaliveInt = setInterval(() => { if (ws && ws.readyState === 1) ws.send(KEEPALIVE_MSG); }, 15000);
 }
-
-function sendRegister(authHeader) {
-  const tls = !!callInfo._useWss;
-  const scheme = tls ? 'sips' : 'sip';
-  const transport = tls ? 'WSS' : 'WS';
-  const uri = `${scheme}:${callInfo.webrtcAddr};transport=${transport}`;
-  const headers = { 'to': `"${callInfo.webrtcId}"<${scheme}:${callInfo.webrtcId}@${callInfo.webrtcAddr}>` };
-  if (authHeader) headers['Authorization'] = authHeader;
-  logSip(`-> REGISTER ${authHeader ? '(Auth)' : ''}`);
-  ws.send(sipMsg('REGISTER', uri, headers, null));
+function startStats() {
+  if (statsInt) clearInterval(statsInt);
+  statsInt = setInterval(async () => {
+    if (!pc) return;
+    try {
+      const stats = await pc.getStats();
+      stats.forEach(r => {
+        if (r.type === 'outbound-rtp' && r.kind === 'audio') logSip(`RTP out: sent=${r.packetsSent || 0} bytes=${r.bytesSent || 0}`);
+        if (r.type === 'inbound-rtp' && r.kind === 'audio') logSip(`RTP in: recv=${r.packetsReceived || 0} lost=${r.packetsLost || 0}`);
+      });
+    } catch (e) {}
+  }, 10000);
 }
-
-function sendInvite(sdp, authHeader, authHeaderName = 'Authorization') {
-  const tls = !!callInfo._useWss;
-  const scheme = tls ? 'sips' : 'sip';
-  const transport = tls ? 'WSS' : 'WS';
-  const dialUser = getTargetDialUser();
-  const uri = `${scheme}:${dialUser}@${callInfo.webrtcAddr};transport=${transport}`;
-  const headers = { 'to': `"${dialUser}"<${scheme}:${dialUser}@${callInfo.webrtcAddr}>` };
-  if (authHeader) headers[authHeaderName] = authHeader;
-  logSip(`-> INVITE ${dialUser}`);
-  const fullInvite = sipMsg('INVITE', uri, headers, sdp);
-  logSip(`<!> FULL INVITE sent:\n` + fullInvite.slice(0, 2500).replace(/Authorization: .*/, 'Authorization: <hidden>').replace(/Proxy-Authorization: .*/, 'Proxy-Authorization: <hidden>'));
-  ws.send(fullInvite);
-  inviteSent = true;
-}
-
-function sendAck(customToHeader, isErrorAck = false) {
-  if (!ws || ws.readyState !== 1) return;
-  const tls = !!callInfo._useWss;
-  const scheme = tls ? 'sips' : 'sip';
-  const transport = tls ? 'WSS' : 'WS';
-  const dialUser = getTargetDialUser();
-  const uri = `${scheme}:${dialUser}@${callInfo.webrtcAddr};transport=${transport}`;
-  const headers = {};
-  if (customToHeader) headers['to'] = customToHeader;
-  else if (toTag) headers['to'] = `"${dialUser}"<${scheme}:${dialUser}@${callInfo.webrtcAddr}>;tag=${toTag}`;
-  logSip(`-> ACK`);
-  ws.send(sipMsg('ACK', uri, headers, null, isErrorAck ? lastInviteBranch : null));
-}
-
-function sendBye() {
-  if (!ws || ws.readyState !== 1) return;
-  const tls = !!callInfo._useWss;
-  const scheme = tls ? 'sips' : 'sip';
-  const transport = tls ? 'WSS' : 'WS';
-  const dialUser = getTargetDialUser();
-  const uri = `${scheme}:${dialUser}@${callInfo.webrtcAddr};transport=${transport}`;
-  const headers = {};
-  if (toTag) headers['to'] = `"${dialUser}"<${scheme}:${dialUser}@${callInfo.webrtcAddr}>;tag=${toTag}`;
-  logSip(`-> BYE`);
-  ws.send(sipMsg('BYE', uri, headers, null));
-}
-
-function parseSip(data) {
-  const headEnd = data.indexOf('\r\n\r\n');
-  const head = headEnd >= 0 ? data.substring(0, headEnd) : data;
-  const body = headEnd >= 0 ? data.substring(headEnd + 4) : '';
-  const lines = head.split('\r\n');
-  const start = (lines[0] || '').trim();
-  const headers = {};
-  for (let i = 1; i < lines.length; i++) {
-    const idx = lines[i].indexOf(':');
-    if (idx > 0) {
-      const k = lines[i].substring(0, idx).trim().toLowerCase();
-      const v = lines[i].substring(idx + 1).trim();
-      headers[k] = headers[k] ? headers[k] + ', ' + v : v;
-    }
-  }
-  return { start, headers, body };
-}
-
-async function onSipMessage(data) {
-  if (!data || !data.trim()) return;
-  const { start, headers, body } = parseSip(data);
-  if (!start) return;
-
-  const cseqH = headers['cseq'] || '';
-  const method = cseqH.split(' ').pop() || 'REGISTER';
-  logSip(`<- ${start} [${method}]`);
-
-  if (start.startsWith('SIP/2.0 401') || start.startsWith('SIP/2.0 407')) {
-    const wwwAuth = headers['www-authenticate'] || headers['proxy-authenticate'] || '';
-    const authHeaderName = start.startsWith('SIP/2.0 407') ? 'Proxy-Authorization' : 'Authorization';
-    const tls = !!callInfo._useWss;
-    const scheme = tls ? 'sips' : 'sip';
-    const transport = tls ? 'WSS' : 'WS';
-    const dialUser = getTargetDialUser();
-    let uri;
-    if (method === 'REGISTER') uri = `${scheme}:${callInfo.webrtcAddr};transport=${transport}`;
-    else uri = `${scheme}:${dialUser}@${callInfo.webrtcAddr};transport=${transport}`;
-    const auth = buildAuthHeader(wwwAuth, method, uri);
-    if (method === 'REGISTER') {
-      setStatus('Authenticating (REGISTER)...');
-      sendRegister(auth);
-    } else if (pendingSdp) {
-      sendAck(headers['to'], true);
-      setStatus('Authenticating call (INVITE Auth)...');
-      sendInvite(pendingSdp, auth, authHeaderName);
-    }
-  } else if (start.startsWith('SIP/2.0 100')) {
-    setStatus('Opening line (100 Trying)...');
-  } else if (start.startsWith('SIP/2.0 180') || start.startsWith('SIP/2.0 183')) {
-    setStatus('Ringing... 📲');
-    logSip(`<!> FULL ${start.split(' ')[1]} response:\n` + data.slice(0, 2500));
-    const toH = headers['to'] || '';
-    const m = toH.match(/tag=([^\s;,]+)/);
-    if (m) toTag = m[1];
-    if (body && pc && !pc.remoteDescription) {
-      try {
-        await pc.setRemoteDescription({ type: 'answer', sdp: body });
-        remoteAudio.play().catch(() => {});
-      } catch(e) {}
-    }
-  } else if (start.startsWith('SIP/2.0 200')) {
-    if (cseqH.includes('OPTIONS')) {
-      // Keepalive reply — connection alive, ignore
-      return;
-    }
-    if (cseqH.includes('REGISTER')) {
-      if (!registered) {
-        registered = true;
-        setStatus('Registered ✅ setting up audio...');
-        await startMedia();
-      }
-    } else if (cseqH.includes('INVITE')) {
-      setStatus('Connected ✅');
-      startKeepalive();
-      const toH = headers['to'] || '';
-      const m = toH.match(/tag=([^\s;,]+)/);
-      if (m) toTag = m[1];
-      sendAck();
-      if (body && pc) {
-        try {
-          if (!pc.remoteDescription) {
-            await pc.setRemoteDescription({ type: 'answer', sdp: body });
-            logSip(`Remote SDP set from 200 OK (${body.length} chars)`);
-          } else {
-            logSip(`200 OK SDP skipped (already have remote desc from 183)`);
-          }
-          remoteAudio.play().catch(() => {});
-        } catch(e) { logSip(`SDP set err: ${e.message}`); }
-      } else if (pc && !body) {
-        logSip(`⚠️ 200 OK without SDP!`);
-      }
-      if (!timerInt) {
-        callStart = Date.now();
-        timerInt = setInterval(() => {
-          const s = Math.floor((Date.now() - callStart) / 1000);
-          timerEl.textContent = `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
-        }, 1000);
-      }
-    } else if (cseqH.includes('BYE')) {
-      endCallUI('Call ended');
-    }
-  } else if (start.match(/^SIP\/2\.0 [4-6]\d\d/)) {
-    if (method === 'INVITE') sendAck(headers['to'], true);
-    const code = start.substring(8, 11);
-    logSip(`<!> FULL ${code} response:\n` + data.slice(0, 1800));
-    endCallUI(`Rejected by server (${code} at ${method})`);
-  } else if (start.startsWith('BYE')) {
-    endCallUI('The other party ended the call');
-  } else if (start.startsWith('OPTIONS') || start.startsWith('NOTIFY') || start.startsWith('INFO')) {
-    const via = headers['via'] || '';
-    const from = headers['from'] || '';
-    const to = headers['to'] || '';
-    const cid = headers['call-id'] || '';
-    const cs = headers['cseq'] || '';
-    let reply = `SIP/2.0 200 OK\r\nVia: ${via}\r\nFrom: ${from}\r\nTo: ${to}\r\nCall-ID: ${cid}\r\nCSeq: ${cs}\r\nContent-Length: 0\r\n\r\n`;
-    ws.send(reply);
-  }
+function stopKeepalive() {
+  if (keepaliveInt) { clearInterval(keepaliveInt); keepaliveInt = null; }
+  if (statsInt) { clearInterval(statsInt); statsInt = null; }
 }
 
 async function startMedia() {
   try {
-    setStatus('Requesting microphone permission...');
+    setStatus('طلب إذن الميكروفون...');
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     const atrack = localStream.getAudioTracks()[0];
-    if (atrack) logSip(`Mic: enabled=${atrack.enabled} muted=${atrack.muted} state=${atrack.readyState} label=${atrack.label.slice(0,20)}`);
+    if (atrack) logSip(`Mic: enabled=${atrack.enabled} muted=${atrack.muted} state=${atrack.readyState}`);
+    applyMediaState();  // honour a Mute pressed while connecting
   } catch (e) {
-    endCallUI('Cannot access microphone: ' + e.message);
+    endCallUI('تعذر الوصول للميكروفون: ' + e.message);
     return;
   }
-
+  if (hangupRequested) { endCallUI('أنهيت المكالمة'); return; }
   try {
-    setStatus('Setting up audio channel (WebRTC)...');
+    setStatus('تجهيز قناة الصوت (WebRTC)...');
     const iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
     if (callInfo.stunAddr) {
       const stunClean = callInfo.stunAddr.replace(/^stun:/i, '').trim();
@@ -590,124 +871,581 @@ async function startMedia() {
     }
     if ((callInfo.isTurn === 'Y' || callInfo.isTurn === true) && callInfo.turnAddr) {
       const turnClean = callInfo.turnAddr.replace(/^turn:/i, '').trim();
-      if (turnClean) {
-        iceServers.push({
-          urls: 'turn:' + turnClean,
-          username: String(callInfo.turnId || ''),
-          credential: String(callInfo.turnPwd || '')
-        });
-      }
+      if (turnClean) iceServers.push({ urls: 'turn:' + turnClean, username: String(callInfo.turnId || ''), credential: String(callInfo.turnPwd || '') });
     }
-
     pc = new RTCPeerConnection({ iceServers });
     pc.ontrack = e => {
-      logSip(`Media track received!`);
+      logSip('Media track received!');
       if (e.streams && e.streams[0]) {
         remoteAudio.srcObject = e.streams[0];
+        if (boost) attachBoost();
         remoteAudio.play().catch(err => logSip(`Audio play err: ${err.message}`));
       }
     };
-    // Connection diagnostics — to detect ICE/DTLS failure
-    pc.oniceconnectionstatechange = () => logSip(`ICE state: ${pc.iceConnectionState}`);
-    pc.onconnectionstatechange = () => logSip(`PC state: ${pc.connectionState}`);
-    let iceDone = false;
-    const iceDoneFn = () => { if (!iceDone) { iceDone = true; } };
+    pc.oniceconnectionstatechange = () => pc && logSip(`ICE state: ${pc.iceConnectionState}`);
+    pc.onconnectionstatechange = () => pc && logSip(`PC state: ${pc.connectionState}`);
     pc.onicecandidate = e => {
       if (e.candidate) {
         const c = e.candidate.candidate;
         const typ = (c.match(/typ (\w+)/) || [])[1] || '?';
-        logSip(`ICE candidate: ${typ} ${(c.match(/ (\d+\.\d+\.\d+\.\d+)/) || [])[1] || ''}`);
-      } else {
-        iceDoneFn();
+        logSip(`ICE candidate: ${typ}`);
       }
     };
-
     localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-
     const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
     await pc.setLocalDescription(offer);
 
-    setStatus('Gathering audio routes (ICE)...');
+    setStatus('تجميع مسارات الصوت (ICE)...');
     await new Promise(res => {
-      if (pc.iceGatheringState === 'complete') return res();
-      const check = () => { if (iceDone || pc.iceGatheringState === 'complete') res(); else setTimeout(check, 100); };
+      const t0 = Date.now();
+      const check = () => {
+        if (!pc || pc.iceGatheringState === 'complete' || Date.now() - t0 > 3000) return res();
+        setTimeout(check, 100);
+      };
       check();
-      setTimeout(res, 3000);
     });
-
-    if (!pc || !pc.localDescription) return;
+    if (!pc || !pc.localDescription || hangupRequested) { if (hangupRequested) endCallUI('أنهيت المكالمة'); return; }
     pendingSdp = cleanSdpForSip(pc.localDescription.sdp);
-    setStatus('Ring request sent (INVITE)...');
+    setStatus('تم إرسال طلب الرن (INVITE)...');
     sendInvite(pendingSdp, null);
   } catch (err) {
-    endCallUI('Audio setup error: ' + err.message);
+    endCallUI('خطأ في تجهيز الصوت: ' + err.message);
   }
 }
 
 function endCallUI(msg) {
-  setStatus(msg || 'Call ended');
+  if (uiEnded) { if (msg) setStatus(msg); return; }
+  uiEnded = true;
+  setStatus(msg || 'انتهت المكالمة');
   stopKeepalive();
+  if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
   if (timerInt) { clearInterval(timerInt); timerInt = null; }
+  const dur = callConnectedAt ? Math.floor((Date.now() - callConnectedAt) / 1000) : 0;
+  const cost = callRate && callConnectedAt ? Math.ceil(Math.max(1, dur) / 60) * callRate : null;
+  ctrlSend({ type: 'ended', duration: dur, cost });
+  const uploadP = stopAndUploadRecording();
   callBtn.style.display = '';
   hangBtn.style.display = 'none';
-  if (localStream) {
-    localStream.getTracks().forEach(t => t.stop());
-    localStream = null;
-  }
-  if (pc) { try { pc.close(); } catch(e){} pc = null; }
-  if (ws && ws.readyState === 1) { try { ws.close(); } catch(e){} }
-  ws = null; registered = false; inviteSent = false; pendingSdp = null; toTag = ''; uiEnded = true;
+  resetInCall();
+  if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+  if (pc) { try { pc.close(); } catch (e) {} pc = null; }
+  const sock = ws; ws = null;
+  if (sock && sock.readyState <= 1) { try { sock.close(); } catch (e) {} }
+  const cSock = controlWs; controlWs = null;
+  // keep control socket open briefly so the ended event and any late cmds flush
+  setTimeout(() => { if (cSock && cSock.readyState <= 1) try { cSock.close(); } catch (e) {} }, 800);
+  registered = false; inviteSent = false; established = false; pendingSdp = null; toTag = '';
+  callConnectedAt = 0; callDialled = null;
+  uploadP.then(() => {});
+  if (wasConnected) { wasConnected = false; setTimeout(refreshBalance, 1500); }
 }
 
+function hangup() {
+  if (uiEnded) return;
+  hangupRequested = true;
+  hangBtn.style.display = 'none';
+  setStatus('جاري إنهاء المكالمة...');
+  if (!ws || ws.readyState !== 1) { endCallUI('أنهيت المكالمة'); return; }
+  if (established) sendBye();
+  else if (inviteSent && gotProvisional) sendCancel();
+  else if (inviteSent) logSip('Waiting for 1xx before CANCEL...');  // CANCEL goes out when 1xx arrives
+  else { endCallUI('أنهيت المكالمة'); return; }
+  // Wait for the server to confirm (200 to BYE / 487 to INVITE) before closing the socket
+  closeTimer = setTimeout(() => endCallUI('أنهيت المكالمة'), 4000);
+}
+hangBtn.onclick = hangup;
+
+// ---------- Telegram control channel + call recording ----------
+const RECORDING_ON = {{ 'true' if recording else 'false' }};
+const TG_READY = {{ 'true' if telegram_ready else 'false' }};
+let controlWs = null, controlId = '', recorder = null, recordedChunks = [], recAudioCtx = null;
+let callConnectedAt = 0, callRate = 0, callDialled = null;
+
+(function initRecToggle() {
+  const btn = document.getElementById('recToggle');
+  if (!btn) return;
+  btn.onclick = async () => {
+    if (!TG_READY) { alert('فعّل بوت تيليجرام الأول (TELEGRAM_BOT_TOKEN + TELEGRAM_OWNER_ID على Railway)'); return; }
+    const on = btn.dataset.on !== '1';
+    btn.disabled = true;
+    try {
+      const r = await fetch('/api/recording/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ on }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || r.status);
+      btn.dataset.on = j.on ? '1' : '0';
+      btn.textContent = j.on ? 'تشغيل ✅' : 'إيقاف';
+      document.getElementById('recBanner').classList.toggle('on', j.on);
+    } catch (e) { alert('فشل: ' + e.message); }
+    btn.disabled = false;
+  };
+  if (RECORDING_ON) document.getElementById('recBanner').classList.add('on');
+})();
+
+function recordingEnabled() {
+  const btn = document.getElementById('recToggle');
+  if (btn) return btn.dataset.on === '1';
+  return RECORDING_ON;
+}
+
+function openControl(target) {
+  try {
+    controlId = 'c' + rand(12);
+    callDialled = target;
+    callRate = (COUNTRY_BY_CODE[target.cc] || {}).rate || 0;
+    callConnectedAt = 0;
+    const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws-control`;
+    const sock = new WebSocket(url);
+    controlWs = sock;
+    sock.onopen = () => {
+      sock.send(JSON.stringify({
+        type: 'hello', callId: controlId, number: target.national, country: target.cc,
+        rate: callRate, coins: currentCoins(),
+      }));
+    };
+    sock.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'cmd') handleTgCmd(msg.action);
+      } catch (err) {}
+    };
+    sock.onclose = () => { if (controlWs === sock) controlWs = null; };
+  } catch (e) { logSip('control ws: ' + e.message); }
+}
+function ctrlSend(obj) {
+  if (controlWs && controlWs.readyState === 1) try { controlWs.send(JSON.stringify(obj)); } catch (e) {}
+}
+function handleTgCmd(action) {
+  if (uiEnded) { ctrlSend({ type: 'ack', action, ok: false, error: 'ended' }); return; }
+  try {
+    if (action === 'end') {
+      hangup();
+      ctrlSend({ type: 'ack', action, ok: true, state: {} });
+    } else if (action === 'mute') {
+      micMuted = !micMuted; applyMediaState();
+      ctrlSend({ type: 'ack', action, ok: true, state: { muted: micMuted, held: sipHold || localHold } });
+    } else if (action === 'hold') {
+      // reuse the hold button logic
+      if (!established) { ctrlSend({ type: 'ack', action, ok: false, error: 'not connected' }); return; }
+      holdBtn.click();
+      // ACK after a short delay so reinvite state settles; holdBtn is async via SIP
+      setTimeout(() => {
+        ctrlSend({ type: 'ack', action, ok: true, state: { muted: micMuted, held: sipHold || localHold } });
+      }, 1500);
+    } else {
+      ctrlSend({ type: 'ack', action, ok: false, error: 'unknown' });
+    }
+  } catch (e) {
+    ctrlSend({ type: 'ack', action, ok: false, error: String(e.message || e) });
+  }
+}
+
+function startRecording() {
+  if (!recordingEnabled() || !localStream) return;
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    recAudioCtx = new Ctx();
+    const dest = recAudioCtx.createMediaStreamDestination();
+    recAudioCtx.createMediaStreamSource(localStream).connect(dest);
+    if (remoteAudio.srcObject) {
+      try { recAudioCtx.createMediaStreamSource(remoteAudio.srcObject).connect(dest); } catch (e) {}
+    }
+    const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
+               : (MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '');
+    recordedChunks = [];
+    recorder = mime ? new MediaRecorder(dest.stream, { mimeType: mime }) : new MediaRecorder(dest.stream);
+    recorder.ondataavailable = e => { if (e.data && e.data.size) recordedChunks.push(e.data); };
+    recorder.start(1000);
+    document.getElementById('recBanner').classList.add('on');
+    logSip('Recording started');
+  } catch (e) { logSip('Recording err: ' + e.message); recorder = null; }
+}
+function stopAndUploadRecording() {
+  return new Promise(resolve => {
+    if (!recorder) return resolve();
+    const rec = recorder; recorder = null;
+    rec.onstop = async () => {
+      try {
+        if (recAudioCtx) { try { recAudioCtx.close(); } catch (e) {} recAudioCtx = null; }
+        if (!recordedChunks.length || !TG_READY) return resolve();
+        const blob = new Blob(recordedChunks, { type: rec.mimeType || 'audio/webm' });
+        recordedChunks = [];
+        const fd = new FormData();
+        fd.append('audio', blob, 'call.webm');
+        const dur = callConnectedAt ? Math.floor((Date.now() - callConnectedAt) / 1000) : 0;
+        const mm = String(Math.floor(dur / 60)).padStart(2, '0');
+        const ss = String(dur % 60).padStart(2, '0');
+        fd.append('duration', `${mm}:${ss}`);
+        if (callDialled) { fd.append('number', callDialled.national); fd.append('country', callDialled.cc); }
+        const r = await fetch('/api/recording/upload', { method: 'POST', body: fd });
+        logSip('Recording upload: ' + r.status);
+      } catch (e) { logSip('Recording upload err: ' + e.message); }
+      resolve();
+    };
+    try { rec.stop(); } catch (e) { resolve(); }
+  });
+}
+
+// ---------- in-call controls: mute / hold / speaker ----------
+const inCallEl = document.getElementById('inCall');
+const muteBtn = document.getElementById('muteBtn');
+const holdBtn = document.getElementById('holdBtn');
+const spkBtn = document.getElementById('spkBtn');
+const ctlNote = document.getElementById('ctlNote');
+let micMuted = false, sipHold = false, localHold = false;
+let reinv = null, lastReinvSeq = 0, sdpBump = 0, lastSentSdp = '';
+let speakerOn = false, sinkChanged = false, boost = null;
+const BOOST_GAIN = 3.0;
+
+function setCtl(btn, active, ico, lbl) {
+  btn.classList.toggle('active', !!active);
+  btn.querySelector('.ico').textContent = ico;
+  btn.querySelector('.lbl').textContent = lbl;
+}
+function showInCall(on) {
+  inCallEl.classList.toggle('on', on);
+  document.body.classList.toggle('in-call', on);
+  updateCtlButtons();
+}
+function updateCtlButtons() {
+  const held = sipHold || localHold;
+  setCtl(muteBtn, micMuted, micMuted ? '🔇' : '🎙️', micMuted ? 'إلغاء الكتم' : 'كتم');
+  setCtl(holdBtn, held, held ? '▶️' : '⏸️', reinv ? '...' : (held ? 'استئناف' : 'تعليق'));
+  holdBtn.disabled = !established || !!reinv;
+  setCtl(spkBtn, speakerOn, speakerOn ? '🔊' : '📱', speakerOn ? 'سبيكر' : 'سماعة');
+}
+function applyMediaState() {
+  const held = sipHold || localHold;
+  if (localStream) localStream.getAudioTracks().forEach(t => { t.enabled = !(held || micMuted); });
+  remoteAudio.muted = held || !!boost;          // boost plays through Web Audio instead
+  if (boost) boost.gain.gain.value = held ? 0 : BOOST_GAIN;
+  updateCtlButtons();
+}
+muteBtn.onclick = () => {
+  micMuted = !micMuted;
+  applyMediaState();
+  logSip(micMuted ? 'Mic muted' : 'Mic unmuted');
+};
+
+// --- hold: re-INVITE with a=sendonly / a=sendrecv. The SDP keeps the same ICE/DTLS
+// parameters (only direction + o= version change), so the WebRTC media path itself is
+// never renegotiated; the mic track is disabled and remote audio silenced locally too.
+function sipSdpWithDirection(direction) {
+  let sdp = cleanSdpForSip(pc.localDescription.sdp);
+  sdpBump++;
+  sdp = sdp.replace(/^(o=\S+ \S+ )(\d+)/m, (m, a, v) => a + (BigInt(v) + BigInt(sdpBump)).toString());
+  if (/^a=(sendrecv|sendonly|recvonly|inactive)\s*$/m.test(sdp)) sdp = sdp.replace(/^a=(sendrecv|sendonly|recvonly|inactive)\s*$/gm, 'a=' + direction);
+  else sdp = sdp.replace(/(m=audio[^\r\n]*\r\n)/, `$1a=${direction}\r\n`);
+  // a re-offer keeps the DTLS role already negotiated instead of actpass
+  const remoteSetup = ((pc.remoteDescription && pc.remoteDescription.sdp) || '').match(/a=setup:(\w+)/);
+  const role = remoteSetup ? ({ active: 'passive', passive: 'active' })[remoteSetup[1]] : null;
+  if (role) sdp = sdp.replace(/^a=setup:actpass\s*$/gm, 'a=setup:' + role);
+  return sdp;
+}
+function sendReinvite(direction, authHeader, authHeaderName, sdp) {
+  const headers = {};
+  if (authHeader) headers[authHeaderName] = authHeader;
+  if (reinv && reinv.timer) clearTimeout(reinv.timer);
+  const body = sdp || sipSdpWithDirection(direction);
+  const seq = invCseq++;
+  reinv = { direction, seq, branch: newBranch(), uri: remoteTarget || lastInviteUri, sdp: body, authTried: !!authHeader };
+  lastReinvSeq = seq;
+  reinv.timer = setTimeout(() => {
+    if (reinv && reinv.seq === seq) reinviteFailed('timeout');
+  }, 8000);
+  logSip(`-> re-INVITE (${direction})${authHeader ? ' (Auth)' : ''}`);
+  wsSend(buildRequest({
+    method: 'INVITE', uri: reinv.uri, to: remoteToHeader(toTag), callId: invCallId, fromTag: invFromTag,
+    cseq: seq, branch: reinv.branch, routes: routeSet, headers, body,
+  }));
+  updateCtlButtons();
+}
+function ackReinvite2xx(seq) {
+  logSip('-> ACK (re-INVITE)');
+  wsSend(buildRequest({
+    method: 'ACK', uri: remoteTarget || lastInviteUri, to: remoteToHeader(toTag),
+    callId: invCallId, fromTag: invFromTag, cseq: seq, routes: routeSet,
+  }));
+}
+function ackReinviteNon2xx(r, toFromResponse) {
+  logSip('-> ACK (re-INVITE non-2xx)');
+  wsSend(buildRequest({
+    method: 'ACK', uri: r.uri, to: toFromResponse || remoteToHeader(toTag),
+    callId: invCallId, fromTag: invFromTag, cseq: r.seq, branch: r.branch, contact: false,
+  }));
+}
+function reinviteFailed(why) {
+  const r = reinv; reinv = null;
+  if (r && r.timer) clearTimeout(r.timer);
+  if (!r) return;
+  if (r.direction === 'sendonly') {
+    localHold = true;  // fallback: hold locally, the call stays up
+    ctlNote.textContent = `السيرفر مقبلش التعليق (${why}) — اتعمل تعليق محلي (الميكروفون مقفول والصوت ساكت)`;
+  } else {
+    sipHold = false; localHold = false;
+    ctlNote.textContent = `السيرفر مقبلش الاستئناف (${why}) — رجّعنا الصوت من عندك. لو الطرف التاني مش سامعك جرّب تعليق واستئناف تاني`;
+  }
+  logSip(`re-INVITE ${r.direction} failed: ${why}`);
+  applyMediaState();
+  if (established) setStatus(sipHold || localHold ? 'المكالمة متعلقة ⏸️' : 'متصل ✅');
+}
+async function onReinviteResponse(code, seq, headers, raw, body) {
+  const r = reinv && reinv.seq === seq ? reinv : null;
+  if (!r) {  // retransmitted / late response to an old re-INVITE
+    if (code >= 200 && code < 300 && seq === lastReinvSeq) ackReinvite2xx(seq);
+    return;
+  }
+  if (code < 200) return;
+  if (code === 401 || code === 407) {
+    ackReinviteNon2xx(r, headers['to']);
+    if (r.authTried) { reinviteFailed(String(code)); return; }
+    const challenge = headers['www-authenticate'] || headers['proxy-authenticate'] || '';
+    sendReinvite(r.direction, buildAuthHeader(challenge, 'INVITE'), code === 407 ? 'Proxy-Authorization' : 'Authorization', r.sdp);
+    return;
+  }
+  if (code >= 200 && code < 300) {
+    clearTimeout(r.timer); reinv = null;
+    ackReinvite2xx(seq);
+    const contact = (raw['contact'] || [])[0];
+    if (contact) { const u = uriOf(splitHeaderList(contact)[0] || contact); if (u && !u.includes('.invalid')) remoteTarget = u; }
+    lastSentSdp = r.sdp;
+    sipHold = r.direction === 'sendonly';
+    localHold = false;
+    ctlNote.textContent = sipHold ? 'المكالمة متعلقة عند السيرفر' : '';
+    logSip(`re-INVITE ${r.direction} accepted (${code})`);
+    applyMediaState();
+    setStatus(sipHold ? 'المكالمة متعلقة ⏸️' : 'متصل ✅');
+    return;
+  }
+  ackReinviteNon2xx(r, headers['to']);
+  reinviteFailed(String(code));
+}
+holdBtn.onclick = () => {
+  if (!established || uiEnded || hangupRequested || reinv) return;
+  const held = sipHold || localHold;
+  if (held && !sipHold) {  // only held locally -> resume locally
+    localHold = false; ctlNote.textContent = ''; applyMediaState(); setStatus('متصل ✅'); return;
+  }
+  if (!pc || !pc.localDescription || !ws || ws.readyState !== 1) {
+    localHold = !held; applyMediaState(); setStatus(localHold ? 'المكالمة متعلقة ⏸️ (محلي)' : 'متصل ✅'); return;
+  }
+  if (!held) { localHold = true; applyMediaState(); setStatus('جاري التعليق...'); }
+  else setStatus('جاري الاستئناف...');
+  ctlNote.textContent = '';
+  sendReinvite(held ? 'sendrecv' : 'sendonly');
+};
+
+// --- speaker / earpiece ---
+function attachBoost() {
+  try {
+    if (!remoteAudio.srcObject) return;
+    if (!boost) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new Ctx();
+      boost = { ctx, gain: ctx.createGain(), src: null };
+      boost.gain.connect(ctx.destination);
+    }
+    if (boost.src) { try { boost.src.disconnect(); } catch (e) {} }
+    boost.src = boost.ctx.createMediaStreamSource(remoteAudio.srcObject);
+    boost.src.connect(boost.gain);
+    boost.ctx.resume && boost.ctx.resume();
+  } catch (e) { logSip('Boost err: ' + e.message); stopBoost(); }
+  applyMediaState();
+}
+function stopBoost() {
+  if (boost) {
+    try { boost.src && boost.src.disconnect(); boost.gain.disconnect(); boost.ctx.close(); } catch (e) {}
+    boost = null;
+  }
+  applyMediaState();
+}
+async function outputDevices() {
+  try { return (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audiooutput'); }
+  catch (e) { return []; }
+}
+spkBtn.onclick = async () => {
+  const want = !speakerOn;
+  if (typeof remoteAudio.setSinkId === 'function') {
+    const devs = await outputDevices();
+    const spk = devs.find(d => /speaker|loud|مكبر/i.test(d.label) && !/head|ear|blue|bt/i.test(d.label));
+    const ear = devs.find(d => /earpiece|receiver|handset|phone/i.test(d.label));
+    let target = null;
+    if (spk && ear) target = want ? spk : ear;
+    else if (devs.length > 1) {  // desktop: cycle through outputs
+      const cur = devs.findIndex(d => d.deviceId === (remoteAudio.sinkId || 'default'));
+      target = devs[(cur + 1) % devs.length];
+    }
+    if (target) {
+      try {
+        await remoteAudio.setSinkId(target.deviceId);
+        sinkChanged = true;
+        speakerOn = spk && ear ? want : target.deviceId !== 'default';
+        ctlNote.textContent = 'الصوت طالع من: ' + (target.label || 'جهاز صوت');
+        logSip('Audio output: ' + (target.label || target.deviceId.slice(0, 8)));
+        updateCtlButtons();
+        return;
+      } catch (e) { logSip('setSinkId err: ' + e.message); }
+    }
+  }
+  if (navigator.mediaDevices && typeof navigator.mediaDevices.selectAudioOutput === 'function' && typeof remoteAudio.setSinkId === 'function') {
+    try {  // Firefox: let the user pick the output
+      const d = await navigator.mediaDevices.selectAudioOutput();
+      await remoteAudio.setSinkId(d.deviceId);
+      sinkChanged = true; speakerOn = true;
+      ctlNote.textContent = 'الصوت طالع من: ' + (d.label || 'جهاز صوت');
+      updateCtlButtons();
+      return;
+    } catch (e) { logSip('selectAudioOutput: ' + e.message); }
+  }
+  // Fallback (most mobile browsers can't pick earpiece/speaker): loudness boost
+  speakerOn = want;
+  if (want) attachBoost(); else stopBoost();
+  ctlNote.textContent = want ? 'المتصفح ده مش بيسمح بتغيير السماعة — علّينا الصوت بدالها 🔊' : '';
+  updateCtlButtons();
+};
+
+// --- DTMF: RFC 4733 telephone-event through WebRTC, SIP INFO as fallback ---
+const dtmfLine = document.getElementById('dtmfLine');
+const padBtn = document.getElementById('padBtn');
+let dtmfQueue = '';
+function sendDtmf(d) {
+  if (!'0123456789*#'.includes(d)) return;
+  if (!established) { ctlNote.textContent = 'الأرقام بتتبعت كنغمات بعد ما الطرف التاني يرد'; return; }
+  dtmfQueue += d;
+  dtmfLine.textContent = dtmfQueue.slice(-20);
+  const sender = pc && pc.getSenders ? pc.getSenders().find(x => x.track && x.track.kind === 'audio') : null;
+  const remoteHasTe = !!(pc && pc.remoteDescription && /telephone-event/i.test(pc.remoteDescription.sdp || ''));
+  if (sender && sender.dtmf && sender.dtmf.canInsertDTMF !== false && remoteHasTe) {
+    try {
+      sender.dtmf.insertDTMF(sender.dtmf.toneBuffer + d, 120, 70);
+      logSip(`DTMF ${d} (RTP telephone-event)`);
+      return;
+    } catch (e) { logSip('insertDTMF err: ' + e.message); }
+  }
+  logSip(`-> INFO DTMF ${d}`);
+  wsSend(buildRequest({
+    method: 'INFO', uri: remoteTarget || lastInviteUri, to: remoteToHeader(toTag), callId: invCallId,
+    fromTag: invFromTag, cseq: invCseq++, routes: routeSet,
+    contentType: 'application/dtmf-relay', body: `Signal=${d}\r\nDuration=160\r\n`,
+  }));
+}
+padBtn.onclick = () => {
+  const on = !document.body.classList.contains('show-pad');
+  document.body.classList.toggle('show-pad', on);
+  setCtl(padBtn, on, '⌨️', on ? 'إخفاء الأرقام' : 'الأرقام');
+};
+
+function resetInCall() {
+  if (reinv && reinv.timer) clearTimeout(reinv.timer);
+  reinv = null; lastReinvSeq = 0; sdpBump = 0; lastSentSdp = '';
+  micMuted = false; sipHold = false; localHold = false;
+  stopBoost();
+  speakerOn = false;
+  if (sinkChanged && typeof remoteAudio.setSinkId === 'function') { remoteAudio.setSinkId('').catch(() => {}); sinkChanged = false; }
+  remoteAudio.muted = false;
+  ctlNote.textContent = '';
+  dtmfQueue = ''; dtmfLine.textContent = '';
+  document.body.classList.remove('show-pad');
+  setCtl(padBtn, false, '⌨️', 'الأرقام');
+  showInCall(false);
+}
+window.addEventListener('beforeunload', () => {
+  if (!uiEnded && ws && ws.readyState === 1) {
+    if (established) sendBye(); else if (inviteSent && gotProvisional) sendCancel();
+  }
+});
+
+// ---------- redial: last number per browser ----------
+const LAST_KEY = 'easycalls.lastNumber';
+const redialBtn = document.getElementById('redialBtn');
+function getLast() { try { const v = JSON.parse(localStorage.getItem(LAST_KEY) || 'null'); return v && v.raw ? v : null; } catch (e) { return null; } }
+function saveLast(raw, cc) { try { localStorage.setItem(LAST_KEY, JSON.stringify({ raw, cc })); } catch (e) {} showRedial(); }
+function showRedial() {
+  const last = getLast();
+  redialBtn.style.display = last ? '' : 'none';
+  document.getElementById('redialNum').textContent = last ? last.raw : '';
+}
+function loadLast() {
+  const last = getLast();
+  if (!last) return false;
+  if (last.cc && COUNTRY_BY_CODE[last.cc]) picker.value = last.cc;
+  numInput.value = last.raw;
+  detectCountry();
+  return true;
+}
+redialBtn.onclick = () => {
+  if (!uiEnded || callBtn.style.display === 'none') return;   // a call is already starting
+  if (loadLast()) callBtn.click();
+};
+showRedial();
+
 callBtn.onclick = async () => {
-  const raw = numInput.value.replace(/\D/g, '');
-  if (!raw) { setStatus('Enter the number first'); return; }
-  if (!detectedPrefix) { setStatus('Cannot detect country code'); return; }
-  const number = raw.startsWith(detectedPrefix) ? raw.substring(detectedPrefix.length) : raw;
-  setStatus('Preparing call...');
+  if (!uiEnded || callBtn.style.display === 'none') return;
+  if (!numInput.value.trim() && loadLast()) { setStatus('ده آخر رقم اتصلت بيه — دوس اتصال تاني 📞'); return; }
+  const target = parseNumber(numInput.value);
+  if (!target || !target.national) { setStatus('اكتب الرقم الأول'); return; }
+  saveLast(numInput.value.trim(), picker.value);
+  const country = COUNTRY_BY_CODE[target.cc];
+  const coins = currentCoins();
+  if (country && coins !== null && coins < country.rate) {
+    setStatus(`⚠️ كوينزك ${coins} C أقل من سعر الدقيقة لـ ${country.name} (${country.rate} C/دقيقة)`);
+    if (!confirm(`كوينزك ${coins} C وسعر الدقيقة لـ ${country.name} ${country.rate} C.\nالسيرفر غالباً هيرفض المكالمة (رصيد مش كفاية).\nلو شحنت كوينز دلوقتي اضغط 🔄 الأول.\n\nتكمل برضه؟`)) return;
+  }
+  setStatus('تجهيز المكالمة...');
   timerEl.textContent = '';
+  sipLogEl.textContent = `SIP Log: بدء الاتصال بـ +${target.cc} ${target.national}...`;
   remoteAudio.play().catch(() => {});
   callBtn.style.display = 'none';
   try {
     const r = await fetch('/api/call/setup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ number, country_code: detectedPrefix })
+      body: JSON.stringify({ number: target.national, country_code: target.cc, networkTp: networkTp() })
     });
     const info = await r.json();
-    if (info.error) { setStatus('Error: ' + info.error); callBtn.style.display = ''; return; }
+    if (info.error) {
+      showBalances(info);
+      const codeTxt = info.retCode !== undefined && info.retCode !== null ? ` (retCode ${info.retCode})` : '';
+      setStatus((info.message ? '⚠️ ' + info.message : 'خطأ: ' + info.error + (info.retMsg ? ' — ' + info.retMsg : '')) + codeTxt);
+      logSip(`call/req rejected: retCode=${info.retCode} retMsg=${info.retMsg || ''}`);
+      callBtn.style.display = '';
+      return;
+    }
     callInfo = info;
-    logSip(`Setup OK: ${info.webrtcAddr}:${info.webrtcPort}`);
-    if (info.rawFields) logSip(`call/req raw fields: ${info.rawFields.join(', ')}`);
-    if (info.sipIdentity) logSip(`Using sessionId as SIP From identity: ${info.sipIdentity.slice(0,12)}...`);
+    showBalances(info);
+    logSip(`Setup OK: ${info.webrtcAddr}:${info.webrtcPort} dial=${info.dialString}`);
+    if (info.rawFields) logSip(`call/req fields: ${info.rawFields.join(', ')}`);
 
-    regCallId = rand(16) + '@voip';
-    regFromTag = rand(8);
-    regCseq = 1;
-    invCallId = rand(16) + '@voip';
-    invFromTag = rand(8);
-    invCseq = 1;
+    regCallId = rand(16) + '@voip'; regFromTag = rand(8); regCseq = 1;
+    invCallId = rand(16) + '@voip'; invFromTag = rand(8); invCseq = 1;
+    toTag = ''; routeSet = []; remoteTarget = ''; lastInviteUri = '';
+    registered = false; inviteSent = false; gotProvisional = false; established = false;
+    hangupRequested = false; cancelSent = false; byeSent = false; byeAuthTried = false;
+    wasConnected = false; pendingSdp = null;
 
     const tlsRaw = info.isTls;
-    const tlsStr = String(tlsRaw === true ? 'true' : tlsRaw === false ? 'false' : (tlsRaw ?? '')).toLowerCase();
-    const isTlsFlag = (tlsRaw === true || tlsRaw === 1 || tlsStr === 'y' || tlsStr === 'true' || tlsStr === '1' || tlsStr === 'yes') ? '1' : '0';
-    logSip(`🔍 isTls=${JSON.stringify(tlsRaw)} isDtls=${JSON.stringify(info.isDtls)} -> tls=${isTlsFlag}`);
+    const tlsStr = String(tlsRaw ?? '').toLowerCase();
+    const isTlsFlag = (tlsRaw === true || tlsRaw === 1 || ['y', 'true', '1', 'yes'].includes(tlsStr)) ? '1' : '0';
+    logSip(`isTls=${JSON.stringify(tlsRaw)} isDtls=${JSON.stringify(info.isDtls)} -> tls=${isTlsFlag}`);
     callInfo._useWss = isTlsFlag === '1';
 
-    const wsUrl = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws-proxy?host=${encodeURIComponent(info.webrtcAddr)}&port=${encodeURIComponent(info.webrtcPort)}&tls=${isTlsFlag}`;
-    setStatus('Connecting proxy to server...');
-    ws = new WebSocket(wsUrl);
+    const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws-proxy?host=${encodeURIComponent(info.webrtcAddr)}&port=${encodeURIComponent(info.webrtcPort)}&tls=${isTlsFlag}`;
+    setStatus('جاري ربط البروكسي بالسيرفر...');
+    const sock = new WebSocket(wsUrl);
+    ws = sock;
     uiEnded = false; proxyFailed = false;
+    hangBtn.style.display = 'inline-flex';
+    showInCall(true);
+    openControl(target);
 
-    ws.onopen = () => { setStatus('Proxy ready, opening SIP line...'); };
-
-    ws.onmessage = e => {
+    sock.onopen = () => { setStatus('البروكسي جاهز، جاري فتح خط SIP...'); startKeepalive(); };
+    sock.onmessage = e => {
+      if (sock !== ws) return;
       if (typeof e.data === 'string' && e.data.startsWith('ERROR:diag:')) {
         const diagMsg = e.data.slice(11);
         logSip(`Proxy: ${diagMsg}`);
         if (diagMsg.startsWith('backend-ok:')) {
-          const usedScheme = diagMsg.split(':')[1];
-          callInfo._useWss = (usedScheme === 'wss');
+          callInfo._useWss = (diagMsg.split(':')[1] === 'wss');
           sendRegister(null);
         }
         return;
@@ -720,20 +1458,17 @@ callBtn.onclick = async () => {
       }
       onSipMessage(e.data);
     };
-    ws.onerror = () => setStatus('Server connection error');
-    ws.onclose = e => {
+    sock.onerror = () => { if (sock === ws) setStatus('خطأ في الاتصال بالسيرفر'); };
+    sock.onclose = e => {
       logSip(`WS Closed: code=${e.code}`);
-      if (!uiEnded && !proxyFailed) {
-        endCallUI('Disconnected from server (code ' + e.code + ')');
-      }
+      if (sock === ws && !uiEnded && !proxyFailed) endCallUI('انقطع الاتصال بالسيرفر (code ' + e.code + ')');
     };
-    hangBtn.style.display = '';
-    hangBtn.onclick = () => { sendBye(); endCallUI('You ended the call'); };
   } catch (e) {
-    setStatus('Error: ' + e.message);
+    setStatus('خطأ: ' + e.message);
     callBtn.style.display = '';
   }
 };
 </script>
+<script src="{{ url_for('static', filename='plasma.js') }}"></script>
 </body>
 </html>
