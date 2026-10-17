@@ -35,6 +35,7 @@
     </div>
     <a class="btn call" href="/dialer">📞 الدايلر — مكالمة حقيقية</a>
     <a class="btn out" href="/ws-monitor" style="color:#4fc3f7;border-color:#4fc3f755;">🔍 مراقب الـ WebSocket</a>
+    {% include "_share_links.html" %}
     {% else %}
     <div class="box warn">⚠️ مش متصل{% if esim and esim._error %}<br>{% if esim._message %}<span style="font-size:13px;">{{ esim._message }}</span><br>{% endif %}<span style="font-size:12px;direction:ltr;">debug: {{ esim._error }}</span>{% endif %}</div>
     <form method="post" action="/esim/retry" style="margin:0;">
@@ -42,6 +43,7 @@
     </form>
     {% endif %}
     <a class="btn out" href="/logout">تسجيل الخروج</a>
+    <a class="btn out" href="/logout?revoke=1" onclick="return confirm('تسجيل خروج وإلغاء كل الروابط المشتركة؟')" style="font-size:12px;">تسجيل الخروج + إلغاء كل الروابط</a>
   </div>
 <script>
 const rb = document.getElementById('refreshBtn');

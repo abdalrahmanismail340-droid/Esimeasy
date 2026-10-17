@@ -36,6 +36,7 @@
 <body>
 <div class="card">
   <h1>📞 الدايلر</h1>
+  {% if shared %}<div style="font-size:12px;color:#4fc3f7;margin-bottom:6px;">🔗 {{ user.name }} — صالح لحد <span id="linkExp" data-t="{{ link_expires_at }}"></span></div>{% endif %}
   <div class="balance">كوينز: <b id="balance">{{ balance }}</b> C &nbsp;•&nbsp; نقاط: <b id="points">{{ points if points is not none else '—' }}</b> P <button class="refresh" id="refreshBtn" type="button" title="تحديث الرصيد">🔄</button>
     <div style="font-size:11px;color:#888;">المكالمات بتتخصم من الكوينز (C) بس</div></div>
   <select class="picker" id="countryPicker" title="الدولة (للأرقام المحلية اللي بتبدأ بـ 0)">
@@ -50,6 +51,9 @@
   </div>
   <div class="status" id="status">جاهز للاتصال</div>
   <div class="timer" id="timer"></div>
+  {% if shared %}
+  <div class="auth-ok" style="{% if not phone_authenticated %}color:#ffb74d;{% endif %}">{% if phone_authenticated %}✅ رقم صاحب الحساب متوثق{% else %}⚠️ صاحب الرابط لسه موثقش رقمه — لو المكالمات اترفضت، اطلب منه يوثقه من حسابه.{% endif %}</div>
+  {% else %}
   <div class="auth-ok" id="authOk" style="{% if not phone_authenticated %}display:none;{% endif %}">✅ رقمك متوثق — <a onclick="showAuthBox()">توثيق رقم تاني</a></div>
   <div class="auth-box" id="authBox" style="margin:10px 0; padding:12px; border:1px dashed #ffb74d; border-radius:10px;{% if phone_authenticated %} display:none;{% endif %}">
     <div style="font-size:14px; margin-bottom:8px;">📱 توثيق رقم الموبايل <b>إجباري</b> قبل المكالمات (كود واتساب)</div>
@@ -65,6 +69,7 @@
     </div>
     <div id="authMsg" style="font-size:13px; margin-top:8px;"></div>
   </div>
+  {% endif %}
   <div class="log-container">
     <div class="log-header">
       <span>📋 SIP Activity Log</span>
@@ -75,11 +80,18 @@
     </div>
     <div class="sip-log" id="sipLog">SIP Log: جاهز...</div>
   </div>
+  {% if shared %}
+  <a class="back" href="/logout">خروج من الرابط</a>
+  {% else %}
+  {% include "_share_links.html" %}
   <a class="back" href="/">← رجوع</a>
+  {% endif %}
 </div>
 <audio id="remoteAudio" autoplay playsinline></audio>
 
 <script>
+const linkExp = document.getElementById('linkExp');
+if (linkExp) linkExp.textContent = new Date(+linkExp.dataset.t * 1000).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' });
 const COUNTRIES = {{ countries | tojson }};
 const COUNTRY_BY_CODE = {};
 COUNTRIES.forEach(c => { COUNTRY_BY_CODE[c.code] = c; });
